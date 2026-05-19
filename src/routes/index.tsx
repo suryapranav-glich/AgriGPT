@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Sprout, Activity, Droplets, TrendingUp, ArrowUp, ArrowDown,
   Upload, MessageSquare, BarChart3, FileSearch, Cloud, CloudRain, Sun, CloudSnow, CloudSun, Scan,
@@ -87,18 +87,18 @@ function Dashboard() {
 
       <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { i: Upload, l: t("uploadLeaf") },
-          { i: MessageSquare, l: t("askAI") },
-          { i: BarChart3, l: t("checkPrices") },
-          { i: FileSearch, l: t("findSchemes") },
-        ].map(({ i: Icon, l }) => (
-          <button key={l} className="rounded-xl py-4 flex flex-col items-center gap-2 transition-colors"
-            style={{ background: "#f7f8f6", border: "1px solid #e5e7eb" }}
+          { i: Upload, l: t("uploadLeaf"), to: "/disease" },
+          { i: MessageSquare, l: t("askAI"), to: "/chat" },
+          { i: BarChart3, l: t("checkPrices"), to: "/market" },
+          { i: FileSearch, l: t("findSchemes"), to: "/schemes" },
+        ].map(({ i: Icon, l, to }) => (
+          <Link key={l} to={to} className="rounded-xl py-4 flex flex-col items-center gap-2 transition-colors block"
+            style={{ background: "#f7f8f6", border: "1px solid #e5e7eb", textDecoration: "none" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#3b6d11"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "#f7f8f6"; e.currentTarget.style.borderColor = "#e5e7eb"; }}>
             <Icon size={18} strokeWidth={1.5} style={{ color: "#3b6d11" }} />
             <span style={{ fontSize: 13, color: "#1a1a1a" }}>{l}</span>
-          </button>
+          </Link>
         ))}
       </div>
     </PageWrapper>

@@ -1,0 +1,21 @@
+# AgriGPT Disease Detection — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# ─── Deep Learning ───────────────────────────────────────
+torch==2.3.1
+torchvision==0.18.1
+# For CUDA 12.1 (recommended if you have NVIDIA GPU):
+# pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu121
+
+# ─── Dataset Download ─────────────────────────────────────
+kagglehub>=0.2.0
+
+# ─── ML Utilities ─────────────────────────────────────────
+scikit-learn>=1.4.0
+numpy>=1.26.0
+Pillow>=10.3.0
+
+# ─── Inference API ────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
