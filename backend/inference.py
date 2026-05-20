@@ -97,7 +97,7 @@ def load_model(
     model.load_state_dict(torch.load(weights_path, map_location=device))
     model.to(device)
     model.eval()
-    print(f"[AgriGPT] Model loaded on {device}  ← {weights_path}")
+    print(f"[AgriGPT] Model loaded on {device}  <- {weights_path}")
     return model, class_names, device
 
 

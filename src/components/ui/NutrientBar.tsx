@@ -1,7 +1,13 @@
 const statusMap = {
-  ok:  { bar: "#3b6d11", label: "Good" },
-  low: { bar: "#f59e0b", label: "Low" },
-  def: { bar: "#e24b4a", label: "Deficient" },
+  ok:  { bar: "#3b6d11" },
+  low: { bar: "#f59e0b" },
+  def: { bar: "#e24b4a" },
+};
+
+const defaultLabels = {
+  ok:  "Good",
+  low: "Low",
+  def: "Deficient",
 };
 
 export function NutrientBar({
@@ -9,14 +15,17 @@ export function NutrientBar({
   value,
   max,
   status,
+  statusLabel,
 }: {
   label: string;
   value: number;
   max: number;
   status: "ok" | "low" | "def";
+  statusLabel?: string;
 }) {
   const pct = Math.min(100, Math.round((value / max) * 100));
   const s = statusMap[status];
+  const displayLabel = statusLabel ?? defaultLabels[status];
 
   return (
     <div>
@@ -36,7 +45,7 @@ export function NutrientBar({
               color: s.bar,
             }}
           >
-            {s.label}
+            {displayLabel}
           </span>
         </div>
       </div>

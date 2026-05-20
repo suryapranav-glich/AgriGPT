@@ -62,7 +62,7 @@ def load_rag_engine():
         print(f"[Fertilizer RAG] FAISS index: {_index.ntotal} vectors, {len(_chunks)} chunks")
     else:
         print(
-            "[Fertilizer RAG] ⚠  No FAISS index found. "
+            "[Fertilizer RAG] [WARNING] No FAISS index found. "
             "Run  python -m fertilizer.ingest  after placing ICAR PDFs in data/icar_pdfs/. "
             "Static knowledge base will be used as context."
         )
@@ -71,10 +71,6 @@ def load_rag_engine():
 
     # 3. Gemini client ────────────────────────────────────────────────────────
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        # Fallback to key provided by user in conversation if environment is empty
-        api_key = "AIzaSyD9fc-B02JGybvAbvQCkiYkxE7Ma_biufo"
-        
     if not api_key:
         raise EnvironmentError(
             "GEMINI_API_KEY is not set.\n"
