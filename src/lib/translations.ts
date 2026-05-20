@@ -56,6 +56,7 @@ const en: Dict = {
   gotItAnalysing: "Got it. I'm analysing this for you...",
 
   // Irrigation
+  applyChanges: "Apply Changes",
   heatwaveAlert: "Heatwave alert — peak 42°C expected Thursday. Avoid midday irrigation.",
   location: "Location",
   crop: "Crop",
@@ -270,6 +271,7 @@ const te: Dict = {
 
 
   // Irrigation Page
+  applyChanges: "మార్పులను వర్తింపజేయి",
   heatwaveAlert: "వేడిమి హెచ్చరిక — గురువారం గరిష్ఠ 42°C అంచనా. మధ్యాహ్న నీటిపారుదల మానుకోండి.",
   location: "స్థానం",
   crop: "పంట",
@@ -437,6 +439,7 @@ const hi: Dict = {
   chatMsgA2: "आज की कोलार मंडी में प्याज की कीमत ₹1,820 प्रति क्विंटल है — कल से 3.1% अधिक। पिछले 7 दिनों में रुझान तेजी का है।",
 
   // Irrigation Page
+  applyChanges: "बदलाव लागू करें",
   heatwaveAlert: "लू की चेतावनी — गुरुवार को अधिकतम 42°C अपेक्षित। दोपहर में सिंचाई से बचें।",
   location: "स्थान",
   crop: "फसल",

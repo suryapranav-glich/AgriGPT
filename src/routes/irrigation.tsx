@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { MapPin, AlertTriangle, X } from "lucide-react";
+import { MapPin, AlertTriangle, X, Loader2 } from "lucide-react";
 import { PageWrapper } from "../components/layout/PageWrapper";
-import { Card, Input, Select, Label } from "../components/ui/primitives";
+import { Card, Input, Select, Label, Button } from "../components/ui/primitives";
 import { useTranslation } from "../contexts/LanguageContext";
 
 export const Route = createFileRoute("/irrigation")({ component: Irrigation });
@@ -11,25 +11,143 @@ function Irrigation() {
   const { t } = useTranslation();
   const [showAlert, setShowAlert] = useState(true);
 
-  const days = [
-    { d: t("today"), rain: 22, hi: 34, lo: 24 },
-    { d: t("tomorrow"), rain: 78, hi: 30, lo: 23 },
-    { d: t("day3"), rain: 45, hi: 31, lo: 22 },
-  ];
+  // Input states
+  const [locInput, setLocInput] = useState("Kolar, Karnataka");
+  const [cropInput, setCropInput] = useState("Tomato");
+  const [fieldSizeInput, setFieldSizeInput] = useState(2.5);
+
+  // Applied states
+  const [appliedLoc, setAppliedLoc] = useState("Kolar, Karnataka");
+  const [appliedCrop, setAppliedCrop] = useState("Tomato");
+  const [appliedFieldSize, setAppliedFieldSize] = useState(2.5);
+
+  // Transition state
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  const handleApply = () => {
+    setIsCalculating(true);
+    setTimeout(() => {
+      setAppliedLoc(locInput);
+      setAppliedCrop(cropInput);
+      setAppliedFieldSize(fieldSizeInput);
+      setIsCalculating(false);
+      setShowAlert(true); // Reset dismissible alert when recalculating
+    }, 600);
+  };
+
+  // ── Calculation Pipeline ──────────────────────────────────────────────────
+  const isKolarTomato =
+    appliedLoc.trim().toLowerCase() === "kolar, karnataka" &&
+    appliedCrop === "Tomato";
+
+  // Deterministic seed based on location string hash + crop length
+  const hash =
+    appliedLoc.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) +
+    appliedCrop.length;
+
+  // Temperature and Weather Forecast
+  const days = isKolarTomato
+    ? [
+        { d: t("today"), rain: 22, hi: 34, lo: 24 },
+        { d: t("tomorrow"), rain: 78, hi: 30, lo: 23 },
+        { d: t("day3"), rain: 45, hi: 31, lo: 22 },
+      ]
+    : [
+        {
+          d: t("today"),
+          rain: (hash * 3) % 40,
+          hi: 28 + (hash % 11),
+          lo: 20 + (hash % 6),
+        },
+        {
+          d: t("tomorrow"),
+          rain: (hash * 7) % 95,
+          hi: 28 + ((hash + 2) % 11) - 2,
+          lo: 20 + ((hash + 2) % 6) - 1,
+        },
+        {
+          d: t("day3"),
+          rain: (hash * 13) % 70,
+          hi: 28 + ((hash + 4) % 11) - 1,
+          lo: 20 + ((hash + 4) % 6) - 1,
+        },
+      ];
+
+  // Reference ET (ET0)
+  const refEt = isKolarTomato ? 5.4 : 4.5 + (hash % 21) * 0.1;
+
+  // Crop coefficient (Kc) and label
+  let Kc = 1.15;
+  let cropLabel = "mid-stage";
+  if (appliedCrop === "Tomato") {
+    Kc = 1.15;
+    cropLabel = "mid-stage";
+  } else if (appliedCrop === "Onion") {
+    Kc = 1.05;
+    cropLabel = "bulb-dev";
+  } else if (appliedCrop === "Paddy") {
+    Kc = 1.20;
+    cropLabel = "flooded";
+  } else if (appliedCrop === "Cotton") {
+    Kc = 1.15;
+    cropLabel = "boll-dev";
+  }
+
+  // Crop ET (ETc)
+  const cropEt = refEt * Kc;
+
+  // Effective rainfall (from tomorrow's expected rain)
+  const tomorrowRain = days[1].rain;
+  const effectiveRain = isKolarTomato
+    ? 12.0
+    : tomorrowRain > 50
+      ? Math.round(tomorrowRain * 0.15 * 10) / 10
+      : 0.0;
+
+  // Net irrigation requirement
+  const netIrrRequirement = Math.max(0, cropEt - effectiveRain);
+
+  // Total water volume (Litres)
+  const totalWaterLitres = Math.round(
+    netIrrRequirement * appliedFieldSize * 4046.86
+  );
+
+  // Recommendation strings
+  const shouldIrrigate = netIrrRequirement > 0;
+  const recomTitle = shouldIrrigate
+    ? t("irrigateToday")
+    : t("doNotIrrigateToday");
+  const recomDesc = shouldIrrigate
+    ? `Apply approximately ${netIrrRequirement.toFixed(1)} mm of water (${totalWaterLitres.toLocaleString()} Litres) to maintain optimal soil moisture for ${appliedCrop}.`
+    : `Rain expected tomorrow (${tomorrowRain}% probability). Soil moisture currently adequate. Skip irrigation today.`;
+
+  // Heatwave alert
+  const hasHeatwave = isKolarTomato ? true : days[0].hi >= 38 || refEt > 6.2;
 
   return (
     <PageWrapper title={t("irrigationPlanner")}>
-      {showAlert && (
-        <div className="flex items-center justify-between gap-2 rounded-lg p-2.5 transition-all"
-             style={{ background: "#fdf3e3", border: "1px solid #ba7517" }}>
+      {showAlert && hasHeatwave && (
+        <div
+          className="flex items-center justify-between gap-2 rounded-lg p-2.5 transition-all"
+          style={{ background: "#fdf3e3", border: "1px solid #ba7517" }}
+        >
           <div className="flex items-center gap-2">
-            <AlertTriangle size={15} style={{ color: "#ba7517", flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500 }}>{t("heatwaveAlert")}</span>
+            <AlertTriangle
+              size={15}
+              style={{ color: "#ba7517", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500 }}>
+              {t("heatwaveAlert")}
+            </span>
           </div>
           <button
             onClick={() => setShowAlert(false)}
             className="p-1 rounded-md transition-colors hover:bg-amber-100 flex items-center justify-center cursor-pointer"
-            style={{ border: "none", background: "transparent", color: "#ba7517" }}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "#ba7517",
+            }}
             aria-label="Dismiss alert"
           >
             <X size={16} />
@@ -37,17 +155,24 @@ function Irrigation() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3 items-end">
         <Card>
           <Label>{t("location")}</Label>
           <div className="flex items-center gap-2 mt-2">
             <MapPin size={14} style={{ color: "#3b6d11" }} />
-            <Input defaultValue="Kolar, Karnataka" />
+            <Input
+              value={locInput}
+              onChange={(e) => setLocInput(e.target.value)}
+            />
           </div>
         </Card>
         <Card>
           <Label>{t("crop")}</Label>
-          <Select className="w-full mt-2" defaultValue="Tomato">
+          <Select
+            className="w-full mt-2"
+            value={cropInput}
+            onChange={(e) => setCropInput(e.target.value)}
+          >
             <option value="Tomato">{t("tomato")}</option>
             <option value="Onion">{t("onion")}</option>
             <option value="Paddy">{t("paddy")}</option>
@@ -56,8 +181,33 @@ function Irrigation() {
         </Card>
         <Card>
           <Label>{t("fieldSize")}</Label>
-          <Input className="mt-2" type="number" defaultValue={2.5} />
+          <Input
+            className="mt-2"
+            type="number"
+            step="0.1"
+            value={fieldSizeInput}
+            onChange={(e) =>
+              setFieldSizeInput(parseFloat(e.target.value) || 0)
+            }
+          />
         </Card>
+        <div style={{ height: "100%", display: "flex", alignItems: "flex-end" }}>
+          <Button
+            onClick={handleApply}
+            className="w-full"
+            style={{ height: "44px", display: "flex", gap: "8px" }}
+            disabled={isCalculating}
+          >
+            {isCalculating ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                {t("thinking") || "Calculating..."}
+              </>
+            ) : (
+              t("applyChanges")
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
@@ -65,23 +215,47 @@ function Irrigation() {
           <Card key={f.d}>
             <div className="flex items-center justify-between">
               <Label>{f.d}</Label>
-              <span style={{ fontSize: 12, color: "#1a1a1a" }}>{f.hi}°/{f.lo}°</span>
+              <span style={{ fontSize: 12, color: "#1a1a1a" }}>
+                {f.hi}°/{f.lo}°
+              </span>
             </div>
-            <div className="flex items-center justify-between mt-3" style={{ fontSize: 12, color: "#6b7280" }}>
-              <span>{t("rainProbability")}</span><span>{f.rain}%</span>
+            <div
+              className="flex items-center justify-between mt-3"
+              style={{ fontSize: 12, color: "#6b7280" }}
+            >
+              <span>{t("rainProbability")}</span>
+              <span>{f.rain}%</span>
             </div>
-            <div className="w-full rounded-full mt-1" style={{ height: 4, background: "#f3f4f6" }}>
-              <div style={{ width: `${f.rain}%`, height: "100%", background: "#9aa6b2", borderRadius: 999 }} />
+            <div
+              className="w-full rounded-full mt-1"
+              style={{ height: 4, background: "#f3f4f6" }}
+            >
+              <div
+                style={{
+                  width: `${f.rain}%`,
+                  height: "100%",
+                  background: "#9aa6b2",
+                  borderRadius: 999,
+                }}
+              />
             </div>
           </Card>
         ))}
       </div>
 
-      <div className="mt-3 rounded-xl p-5"
-           style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "3px solid #3b6d11" }}>
-        <div style={{ fontSize: 20, fontWeight: 500, color: "#1a1a1a" }}>{t("doNotIrrigateToday")}</div>
+      <div
+        className="mt-3 rounded-xl p-5"
+        style={{
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderLeft: "3px solid #3b6d11",
+        }}
+      >
+        <div style={{ fontSize: 20, fontWeight: 500, color: "#1a1a1a" }}>
+          {recomTitle}
+        </div>
         <div style={{ fontSize: 14, color: "#6b7280", marginTop: 4 }}>
-          {t("rainExpectedTomorrow")}
+          {recomDesc}
         </div>
 
         <div className="mt-5">
@@ -89,15 +263,29 @@ function Irrigation() {
           <table className="w-full mt-2 text-left">
             <tbody style={{ fontSize: 13 }}>
               {[
-                [t("refEt"), t("refEtVal")],
-                [t("cropCoeff"), t("cropCoeffVal")],
-                [t("cropEt"), t("cropEtVal")],
-                [t("effectiveRain"), t("effectiveRainVal")],
-                [t("netIrrRequirement"), t("netIrrRequirementVal")],
+                [t("refEt"), `${refEt.toFixed(1)} mm/day`],
+                [t("cropCoeff"), `${Kc.toFixed(2)} (${cropLabel})`],
+                [t("cropEt"), `${cropEt.toFixed(2)} mm/day`],
+                [
+                  t("effectiveRain"),
+                  effectiveRain > 0
+                    ? `${effectiveRain} mm expected`
+                    : "0 mm expected",
+                ],
+                [
+                  t("netIrrRequirement"),
+                  netIrrRequirement > 0
+                    ? `${netIrrRequirement.toFixed(1)} mm`
+                    : "0 mm — skip today",
+                ],
               ].map(([k, v]) => (
                 <tr key={k} style={{ borderBottom: "1px solid #f5f5f5" }}>
-                  <td className="py-2" style={{ color: "#6b7280" }}>{k}</td>
-                  <td className="py-2 text-right" style={{ color: "#1a1a1a" }}>{v}</td>
+                  <td className="py-2" style={{ color: "#6b7280" }}>
+                    {k}
+                  </td>
+                  <td className="py-2 text-right" style={{ color: "#1a1a1a" }}>
+                    {v}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -107,3 +295,4 @@ function Irrigation() {
     </PageWrapper>
   );
 }
+
