@@ -57,6 +57,9 @@ const en: Dict = {
 
   // Irrigation
   applyChanges: "Apply Changes",
+  locationPlaceholder: "e.g., Kolar, Karnataka",
+  fieldSizePlaceholder: "e.g., 2.5",
+  enterDetailsPrompt: "Please enter your location and field size above, then click Apply Changes to calculate your irrigation plan.",
   heatwaveAlert: "Heatwave alert — peak 42°C expected Thursday. Avoid midday irrigation.",
   location: "Location",
   crop: "Crop",
@@ -272,6 +275,9 @@ const te: Dict = {
 
   // Irrigation Page
   applyChanges: "మార్పులను వర్తింపజేయి",
+  locationPlaceholder: "ఉదా: కోలార్, కర్ణాటక",
+  fieldSizePlaceholder: "ఉదా: 2.5",
+  enterDetailsPrompt: "దయచేసి మీ స్థానం మరియు పొలం విస్తీర్ణాన్ని నమోదు చేసి, నీటిపారుదల ప్రణాళికను లెక్కించడానికి 'మార్పులను వర్తింపజేయి' క్లిక్ చేయండి.",
   heatwaveAlert: "వేడిమి హెచ్చరిక — గురువారం గరిష్ఠ 42°C అంచనా. మధ్యాహ్న నీటిపారుదల మానుకోండి.",
   location: "స్థానం",
   crop: "పంట",
@@ -440,6 +446,9 @@ const hi: Dict = {
 
   // Irrigation Page
   applyChanges: "बदलाव लागू करें",
+  locationPlaceholder: "जैसे: कोलार, कर्नाटक",
+  fieldSizePlaceholder: "जैसे: 2.5",
+  enterDetailsPrompt: "कृपया अपनी स्थिति और खेत का आकार दर्ज करें, फिर अपनी सिंचाई योजना की गणना करने के लिए 'बदलाव लागू करें' पर क्लिक करें।",
   heatwaveAlert: "लू की चेतावनी — गुरुवार को अधिकतम 42°C अपेक्षित। दोपहर में सिंचाई से बचें।",
   location: "स्थान",
   crop: "फसल",
