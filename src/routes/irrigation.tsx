@@ -16,73 +16,119 @@ function Irrigation() {
   const [cropInput, setCropInput] = useState("Tomato");
   const [fieldSizeInput, setFieldSizeInput] = useState<number | "">("");
 
-  // Applied states initialized to empty
-  const [appliedLoc, setAppliedLoc] = useState("");
-  const [appliedCrop, setAppliedCrop] = useState("Tomato");
-  const [appliedFieldSize, setAppliedFieldSize] = useState<number | "">("");
+  // Single cohesive applied plan state (starts empty)
+  const [appliedPlan, setAppliedPlan] = useState<{
+    loc: string;
+    crop: string;
+    fieldSize: number;
+    days: { d: string; rain: number; hi: number; lo: number }[];
+    refEt: number;
+    hasHeatwave: boolean;
+  } | null>(null);
 
   // Transition state
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!locInput.trim() || fieldSizeInput === "") {
       alert("Please enter a valid Location and Field Size first.");
       return;
     }
+
     setIsCalculating(true);
-    setTimeout(() => {
-      setAppliedLoc(locInput);
-      setAppliedCrop(cropInput);
-      setAppliedFieldSize(fieldSizeInput);
-      setIsCalculating(false);
-      setShowAlert(true); // Reset dismissible alert when recalculating
-    }, 600);
-  };
+    try {
+      // 1. Geocode location to get coordinates (Open-Meteo free geocoding API)
+      const cleanName = locInput.replace(/,.*$/, "").trim();
+      let lat = 13.13768; // fallback to Kolar coordinates
+      let lon = 78.12999;
+      let matchedName = locInput;
 
-  const hasAppliedData = appliedLoc !== "" && appliedFieldSize !== "";
+      let geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanName)}&count=1&language=en&format=json`
+      );
+      let geoData = await geoRes.json();
 
-  // ── Calculation Pipeline ──────────────────────────────────────────────────
-  const isKolarTomato =
-    hasAppliedData &&
-    appliedLoc.trim().toLowerCase() === "kolar, karnataka" &&
-    appliedCrop === "Tomato";
+      // If spelling ends with 'y' (e.g. Kamareddy) and not found, fallback to 'i' (Kamareddi)
+      if ((!geoData.results || geoData.results.length === 0) && cleanName.toLowerCase().endsWith("y")) {
+        const altName = cleanName.slice(0, -1) + "i";
+        geoRes = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(altName)}&count=1&language=en&format=json`
+        );
+        geoData = await geoRes.json();
+      }
 
-  // Deterministic seed based on location string hash + crop length
-  const hash = hasAppliedData
-    ? (appliedLoc.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) +
-      appliedCrop.length)
-    : 0;
+      if (geoData.results && geoData.results.length > 0) {
+        lat = geoData.results[0].latitude;
+        lon = geoData.results[0].longitude;
+        matchedName = `${geoData.results[0].name}, ${geoData.results[0].admin1 || geoData.results[0].country}`;
+      } else {
+        console.warn("Geocoding returned no results, using regional default coordinates.");
+      }
 
-  // Temperature and Weather Forecast
-  const days = isKolarTomato
-    ? [
-        { d: t("today"), rain: 22, hi: 34, lo: 24 },
-        { d: t("tomorrow"), rain: 78, hi: 30, lo: 23 },
-        { d: t("day3"), rain: 45, hi: 31, lo: 22 },
-      ]
-    : [
+      // 2. Fetch daily weather forecast from Open-Meteo
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`
+      );
+      const weatherData = await weatherRes.json();
+
+      if (!weatherData.daily) {
+        throw new Error("Invalid response structure from weather API.");
+      }
+
+      const daily = weatherData.daily;
+      const parsedDays = [
         {
           d: t("today"),
-          rain: hasAppliedData ? (hash * 3) % 40 : 0,
-          hi: hasAppliedData ? 28 + (hash % 11) : 0,
-          lo: hasAppliedData ? 20 + (hash % 6) : 0,
+          rain: daily.precipitation_probability_max[0] ?? 0,
+          hi: Math.round(daily.temperature_2m_max[0] ?? 30),
+          lo: Math.round(daily.temperature_2m_min[0] ?? 20),
         },
         {
           d: t("tomorrow"),
-          rain: hasAppliedData ? (hash * 7) % 95 : 0,
-          hi: hasAppliedData ? 28 + ((hash + 2) % 11) - 2 : 0,
-          lo: hasAppliedData ? 20 + ((hash + 2) % 6) - 1 : 0,
+          rain: daily.precipitation_probability_max[1] ?? 0,
+          hi: Math.round(daily.temperature_2m_max[1] ?? 30),
+          lo: Math.round(daily.temperature_2m_min[1] ?? 20),
         },
         {
           d: t("day3"),
-          rain: hasAppliedData ? (hash * 13) % 70 : 0,
-          hi: hasAppliedData ? 28 + ((hash + 4) % 11) - 1 : 0,
-          lo: hasAppliedData ? 20 + ((hash + 4) % 6) - 1 : 0,
+          rain: daily.precipitation_probability_max[2] ?? 0,
+          hi: Math.round(daily.temperature_2m_max[2] ?? 30),
+          lo: Math.round(daily.temperature_2m_min[2] ?? 20),
         },
       ];
 
-  // Reference ET (ET0)
-  const refEt = isKolarTomato ? 5.4 : hasAppliedData ? 4.5 + (hash % 21) * 0.1 : 0;
+      // 3. Compute Reference ET (ET0) based on regional temperatures (Hargreaves approximation)
+      const hiToday = parsedDays[0].hi;
+      const loToday = parsedDays[0].lo;
+      const computedRefEt = Math.round((0.12 * hiToday + 0.1 * (hiToday - loToday) - 0.5) * 10) / 10;
+
+      // Heatwave alert if temperature >= 38°C or ET0 > 6.2 mm/day
+      const hasHeatwave = hiToday >= 38 || computedRefEt > 6.2;
+
+      setAppliedPlan({
+        loc: matchedName,
+        crop: cropInput,
+        fieldSize: Number(fieldSizeInput),
+        days: parsedDays,
+        refEt: computedRefEt,
+        hasHeatwave,
+      });
+      setShowAlert(true);
+    } catch (err) {
+      console.error("Error fetching live weather plan:", err);
+      alert("Failed to load live weather. Please check your internet connection and try again.");
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  const hasAppliedData = appliedPlan !== null;
+  const appliedLoc = appliedPlan ? appliedPlan.loc : "";
+  const appliedCrop = appliedPlan ? appliedPlan.crop : "Tomato";
+  const appliedFieldSize = appliedPlan ? appliedPlan.fieldSize : 0;
+  const days = appliedPlan ? appliedPlan.days : [];
+  const refEt = appliedPlan ? appliedPlan.refEt : 0;
+  const hasHeatwave = appliedPlan ? appliedPlan.hasHeatwave : false;
 
   // Crop coefficient (Kc) and label
   let Kc = 1.15;
@@ -104,21 +150,18 @@ function Irrigation() {
   // Crop ET (ETc)
   const cropEt = refEt * Kc;
 
-  // Effective rainfall (from tomorrow's expected rain)
+  // Effective rainfall (from tomorrow's expected rain probability)
   const tomorrowRain = hasAppliedData ? days[1].rain : 0;
-  const effectiveRain = isKolarTomato
-    ? 12.0
-    : tomorrowRain > 50
-      ? Math.round(tomorrowRain * 0.15 * 10) / 10
-      : 0.0;
+  const effectiveRain = tomorrowRain > 50
+    ? Math.round(tomorrowRain * 0.15 * 10) / 10
+    : 0.0;
 
   // Net irrigation requirement
   const netIrrRequirement = Math.max(0, cropEt - effectiveRain);
 
   // Total water volume (Litres)
-  const appliedFieldSizeNum = typeof appliedFieldSize === "number" ? appliedFieldSize : 0;
   const totalWaterLitres = Math.round(
-    netIrrRequirement * appliedFieldSizeNum * 4046.86
+    netIrrRequirement * appliedFieldSize * 4046.86
   );
 
   // Recommendation strings
@@ -129,9 +172,6 @@ function Irrigation() {
   const recomDesc = shouldIrrigate
     ? `Apply approximately ${netIrrRequirement.toFixed(1)} mm of water (${totalWaterLitres.toLocaleString()} Litres) to maintain optimal soil moisture for ${appliedCrop}.`
     : `Rain expected tomorrow (${tomorrowRain}% probability). Soil moisture currently adequate. Skip irrigation today.`;
-
-  // Heatwave alert
-  const hasHeatwave = isKolarTomato ? true : hasAppliedData && (days[0].hi >= 38 || refEt > 6.2);
 
   return (
     <PageWrapper title={t("irrigationPlanner")}>
@@ -319,4 +359,3 @@ function Irrigation() {
     </PageWrapper>
   );
 }
-
