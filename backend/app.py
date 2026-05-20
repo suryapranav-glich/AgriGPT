@@ -1,7 +1,6 @@
 # =============================================================================
-# AgriGPT — FastAPI Server
+# AgriGPT — FastAPI Server  (updated: Feature 3 Fertilizer added)
 # Run: python app.py
-# Serves: POST /diagnose  (used by the React frontend)
 # =============================================================================
 
 import os
@@ -13,15 +12,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import uvicorn
 
-# ── Resolve absolute paths to the saved models ────────────────────────────────
+# ── Resolve paths ─────────────────────────────────────────────────────────────
 BASE_DIR     = os.path.join(os.path.dirname(__file__), "saved_models")
 WEIGHTS_PATH = os.path.join(BASE_DIR, "agrigpt_production_weights.pth")
 CLASSES_PATH = os.path.join(BASE_DIR, "class_names.json")
 
-# ── Import inference utilities ────────────────────────────────────────────────
+# ── Feature 1: Disease Detection ──────────────────────────────────────────────
 from inference import load_model, predict_from_pil
 
-# ── Disease knowledge base ────────────────────────────────────────────────────
+# ── Feature 3: Fertilizer RAG engine ─────────────────────────────────────────
+from fertilizer.rag_engine import load_rag_engine
+from fertilizer.router import router as fertilizer_router
+
+# ── Disease knowledge base (unchanged) ───────────────────────────────────────
 DISEASE_INFO = {
     "Tomato___Early_blight": {
         "severity": "moderate",
@@ -136,21 +139,23 @@ CONFIDENCE_THRESHOLD = 0.25
 def get_disease_info(class_name: str) -> dict:
     if class_name in DISEASE_INFO:
         return DISEASE_INFO[class_name]
-    parts = class_name.split("___")
-    plant   = parts[0].replace("_", " ").strip() if parts else "Crop"
-    disease = parts[1].replace("_", " ").strip() if len(parts) > 1 else "Condition"
+    parts    = class_name.split("___")
+    plant    = parts[0].replace("_", " ").strip() if parts else "Crop"
+    disease  = parts[1].replace("_", " ").strip() if len(parts) > 1 else "Condition"
     severity = "none" if "healthy" in class_name.lower() else "moderate"
     return {
         "severity": severity,
         "cause": f"Detected: {disease} affecting {plant} leaves.",
-        "organic": "Apply organic neem oil formulation (5ml/Litre) every 7 days as a base precaution.",
-        "chemical": "Consult your nearest agricultural extension branch for regional chemical control charts.",
-        "prevention": "Sanitize farm tools, ensure healthy airflow channels, and regulate irrigation spikes.",
+        "organic": "Apply organic neem oil formulation (5ml/Litre) every 7 days.",
+        "chemical": "Consult your nearest agricultural extension branch.",
+        "prevention": "Sanitize tools, ensure healthy airflow, regulate irrigation.",
     }
 
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
-app = FastAPI(title="AgriGPT Disease Detection API")
+# =============================================================================
+# APP SETUP
+# =============================================================================
+app = FastAPI(title="AgriGPT API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -160,18 +165,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load model once at startup
-print("[AgriGPT] Loading model…")
-_model, _class_names, _device = load_model(
-    weights_path=WEIGHTS_PATH,
-    classes_path=CLASSES_PATH,
-)
-print(f"[AgriGPT] Ready — {len(_class_names)} classes on [{_device}]")
+# ── Include Feature 3 router ──────────────────────────────────────────────────
+app.include_router(fertilizer_router)
 
 
+# =============================================================================
+# STARTUP — load models
+# =============================================================================
+@app.on_event("startup")
+async def startup_event():
+    global _model, _class_names, _device
+
+    # Feature 1: Disease detection model
+    print("[AgriGPT] Loading disease detection model…")
+    _model, _class_names, _device = load_model(
+        weights_path=WEIGHTS_PATH,
+        classes_path=CLASSES_PATH,
+    )
+    print(f"[AgriGPT] Disease model ready — {len(_class_names)} classes on [{_device}]")
+
+    # Feature 3: Fertilizer RAG engine
+    print("[AgriGPT] Loading fertilizer RAG engine…")
+    try:
+        load_rag_engine()
+        print("[AgriGPT] Fertilizer RAG engine ready.")
+    except EnvironmentError as e:
+        print(f"[AgriGPT] ⚠  Fertilizer RAG skipped: {e}")
+
+
+_model       = None
+_class_names = None
+_device      = None
+
+
+# =============================================================================
+# FEATURE 1 — DISEASE DETECTION
+# =============================================================================
 @app.get("/health")
 def health():
-    return {"status": "ok", "classes": len(_class_names), "device": _device}
+    return {
+        "status"  : "ok",
+        "classes" : len(_class_names) if _class_names else 0,
+        "device"  : _device,
+    }
 
 
 @app.post("/diagnose")
@@ -179,12 +215,11 @@ async def diagnose(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image (JPG or PNG)")
 
-    contents = await file.read()
+    contents  = await file.read()
     pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+    result    = predict_from_pil(pil_image, _model, _class_names, _device, top_k=5)
 
-    result = predict_from_pil(pil_image, _model, _class_names, _device, top_k=5)
-
-    top_confidence = result["confidence"] / 100.0   # back to 0-1 for threshold check
+    top_confidence = result["confidence"] / 100.0
     top_class      = result["predicted_class"]
     plant_name     = result["plant"]
     condition_name = result["condition"]
@@ -225,5 +260,8 @@ async def diagnose(file: UploadFile = File(...)):
     }
 
 
+# =============================================================================
+# RUN
+# =============================================================================
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)

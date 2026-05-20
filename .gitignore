@@ -26,6 +26,8 @@ __pycache__/
 *.pth
 backend/saved_models/*.pth
 backend/saved_models/*.json
+backend/data/faiss_index/*.index
+backend/data/faiss_index/chunks.json
 
 # Editor directories and files
 .vscode/*
