@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MapPin, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { MapPin, AlertTriangle, X } from "lucide-react";
 import { PageWrapper } from "../components/layout/PageWrapper";
 import { Card, Input, Select, Label } from "../components/ui/primitives";
 import { useTranslation } from "../contexts/LanguageContext";
@@ -8,6 +9,7 @@ export const Route = createFileRoute("/irrigation")({ component: Irrigation });
 
 function Irrigation() {
   const { t } = useTranslation();
+  const [showAlert, setShowAlert] = useState(true);
 
   const days = [
     { d: t("today"), rain: 22, hi: 34, lo: 24 },
@@ -17,11 +19,23 @@ function Irrigation() {
 
   return (
     <PageWrapper title={t("irrigationPlanner")}>
-      <div className="flex items-center gap-2 rounded-lg p-2"
-           style={{ background: "#fdf3e3", border: "1px solid #ba7517" }}>
-        <AlertTriangle size={14} style={{ color: "#ba7517" }} />
-        <span style={{ fontSize: 13, color: "#1a1a1a" }}>{t("heatwaveAlert")}</span>
-      </div>
+      {showAlert && (
+        <div className="flex items-center justify-between gap-2 rounded-lg p-2.5 transition-all"
+             style={{ background: "#fdf3e3", border: "1px solid #ba7517" }}>
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} style={{ color: "#ba7517", flexShrink: 0 }} />
+            <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500 }}>{t("heatwaveAlert")}</span>
+          </div>
+          <button
+            onClick={() => setShowAlert(false)}
+            className="p-1 rounded-md transition-colors hover:bg-amber-100 flex items-center justify-center cursor-pointer"
+            style={{ border: "none", background: "transparent", color: "#ba7517" }}
+            aria-label="Dismiss alert"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
         <Card>
