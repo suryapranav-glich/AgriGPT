@@ -11,7 +11,14 @@ export function Header({ title }: { title: string }) {
   const [open, setOpen] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
 
-  const initials = user ? user.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase() : "";
+  const initials = user
+    ? user.name
+        .split(" ")
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "";
 
   return (
     <header
@@ -34,9 +41,18 @@ export function Header({ title }: { title: string }) {
           ref={avatarRef}
           onClick={() => setOpen((v) => !v)}
           className="rounded-full flex items-center justify-center"
-          style={user
-            ? { width: 32, height: 32, background: "#f0f5ea", color: "#3b6d11", fontSize: 13, fontWeight: 500 }
-            : { width: 32, height: 32 }}
+          style={
+            user
+              ? {
+                  width: 32,
+                  height: 32,
+                  background: "#f0f5ea",
+                  color: "#3b6d11",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }
+              : { width: 32, height: 32 }
+          }
           aria-label="Account"
         >
           {user ? initials : <NoUserAvatar />}

@@ -27,7 +27,9 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ open, setOpen, toggle: () => setOpen(!open), mobileOpen, setMobileOpen }}>
+    <Ctx.Provider
+      value={{ open, setOpen, toggle: () => setOpen(!open), mobileOpen, setMobileOpen }}
+    >
       {children}
     </Ctx.Provider>
   );

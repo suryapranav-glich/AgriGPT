@@ -24,8 +24,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") localStorage.setItem(KEY, l);
   };
 
-  const t = (key: string): string =>
-    translations[lang]?.[key] ?? translations["en"]?.[key] ?? key;
+  const t = (key: string): string => translations[lang]?.[key] ?? translations["en"]?.[key] ?? key;
 
   return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
 }

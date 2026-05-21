@@ -38,7 +38,7 @@ function renderInline(text: string): React.ReactNode[] {
 // ── block parser ─────────────────────────────────────────────────────────────
 
 type Block =
-  | { type: "bullet";  items: string[] }
+  | { type: "bullet"; items: string[] }
   | { type: "ordered"; items: string[] }
   | { type: "paragraph"; text: string };
 
@@ -46,7 +46,7 @@ function parseBlocks(markdown: string): Block[] {
   const lines = markdown.split("\n");
   const blocks: Block[] = [];
 
-  let currentBullet:  string[] | null = null;
+  let currentBullet: string[] | null = null;
   let currentOrdered: string[] | null = null;
 
   // Separate helpers — so flushing one list type doesn't reset the other
@@ -62,7 +62,10 @@ function parseBlocks(markdown: string): Block[] {
       currentOrdered = null;
     }
   };
-  const flushAll = () => { flushBullet(); flushOrdered(); };
+  const flushAll = () => {
+    flushBullet();
+    flushOrdered();
+  };
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
@@ -70,7 +73,7 @@ function parseBlocks(markdown: string): Block[] {
     // ── Numbered list item: "1. text" / "2.  text"
     const orderedMatch = line.match(/^\s*\d+\.\s+(.+)$/);
     if (orderedMatch) {
-      flushBullet();                          // close any open bullet list
+      flushBullet(); // close any open bullet list
       // ↳ intentionally do NOT flush ordered — keep accumulating into same <ol>
       if (!currentOrdered) currentOrdered = [];
       currentOrdered.push(orderedMatch[1]);
@@ -78,11 +81,9 @@ function parseBlocks(markdown: string): Block[] {
     }
 
     // ── Bullet item: "- text" / "• text" / "* text" (single asterisk only)
-    const bulletMatch =
-      line.match(/^\s*[-•]\s+(.+)$/) ||
-      line.match(/^\s*\*(?!\*)\s+(.+)$/);
+    const bulletMatch = line.match(/^\s*[-•]\s+(.+)$/) || line.match(/^\s*\*(?!\*)\s+(.+)$/);
     if (bulletMatch) {
-      flushOrdered();                         // close any open ordered list
+      flushOrdered(); // close any open ordered list
       if (!currentBullet) currentBullet = [];
       currentBullet.push(bulletMatch[1]);
       continue;
@@ -132,10 +133,7 @@ export function MarkdownText({ children, style }: MarkdownTextProps) {
       {blocks.map((block, bi) => {
         if (block.type === "bullet") {
           return (
-            <ul
-              key={bi}
-              style={{ margin: "6px 0", paddingLeft: 18, listStyleType: "disc" }}
-            >
+            <ul key={bi} style={{ margin: "6px 0", paddingLeft: 18, listStyleType: "disc" }}>
               {block.items.map((item, ii) => (
                 <li key={ii} style={{ marginBottom: 4 }}>
                   {renderInline(item)}
@@ -147,10 +145,7 @@ export function MarkdownText({ children, style }: MarkdownTextProps) {
 
         if (block.type === "ordered") {
           return (
-            <ol
-              key={bi}
-              style={{ margin: "6px 0", paddingLeft: 20, listStyleType: "decimal" }}
-            >
+            <ol key={bi} style={{ margin: "6px 0", paddingLeft: 20, listStyleType: "decimal" }}>
               {block.items.map((item, ii) => (
                 <li key={ii} style={{ marginBottom: 4 }}>
                   {renderInline(item)}

@@ -69,24 +69,30 @@ function DiseaseDetection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
           <Card>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              accept="image/jpeg, image/png" 
-              className="hidden" 
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/jpeg, image/png"
+              className="hidden"
             />
             <button
               onClick={triggerUpload}
               className="w-full flex flex-col items-center justify-center gap-2 rounded-lg cursor-pointer overflow-hidden relative"
               style={{ border: "2px dashed #e5e7eb", height: 200, background: "#fff" }}
             >
-              {previewUrl && state !== 'idle' ? (
-                 <img src={previewUrl} alt="Leaf Preview" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+              {previewUrl && state !== "idle" ? (
+                <img
+                  src={previewUrl}
+                  alt="Leaf Preview"
+                  className="absolute inset-0 w-full h-full object-cover opacity-30"
+                />
               ) : null}
               <div className="z-10 flex flex-col items-center">
                 <UploadCloud size={32} strokeWidth={1.5} style={{ color: "#9ca3af" }} />
-                <div style={{ fontSize: 14, color: "#1a1a1a", marginTop: 8 }}>{t("dropLeafPhoto")}</div>
+                <div style={{ fontSize: 14, color: "#1a1a1a", marginTop: 8 }}>
+                  {t("dropLeafPhoto")}
+                </div>
                 <div style={{ fontSize: 12, color: "#6b7280" }}>{t("supportsJPG")}</div>
               </div>
             </button>
@@ -94,11 +100,16 @@ function DiseaseDetection() {
           <div className="mt-4">
             <Label>{t("commonExamples")}</Label>
             <div className="grid grid-cols-3 gap-2 mt-2">
-              {[{k: "leafBlight"}, {k: "powderyMildew"}, {k: "rust"}].map((n) => (
-                <div key={n.k} className="rounded-lg p-3 text-center"
-                     style={{ border: "1px solid #e5e7eb", background: "#fff" }}>
-                  <div className="rounded-md mx-auto flex items-center justify-center"
-                       style={{ width: 56, height: 56, background: "#f7f8f6" }}>
+              {[{ k: "leafBlight" }, { k: "powderyMildew" }, { k: "rust" }].map((n) => (
+                <div
+                  key={n.k}
+                  className="rounded-lg p-3 text-center"
+                  style={{ border: "1px solid #e5e7eb", background: "#fff" }}
+                >
+                  <div
+                    className="rounded-md mx-auto flex items-center justify-center"
+                    style={{ width: 56, height: 56, background: "#f7f8f6" }}
+                  >
                     <Leaf size={24} strokeWidth={1.5} style={{ color: "#639922" }} />
                   </div>
                   <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>{t(n.k)}</div>
@@ -113,7 +124,9 @@ function DiseaseDetection() {
             <Card>
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Sprout size={28} strokeWidth={1.5} style={{ color: "#9ca3af" }} />
-                <div style={{ fontSize: 14, color: "#6b7280", marginTop: 10 }}>{t("uploadPhotoToSee")}</div>
+                <div style={{ fontSize: 14, color: "#6b7280", marginTop: 10 }}>
+                  {t("uploadPhotoToSee")}
+                </div>
               </div>
             </Card>
           )}
@@ -127,7 +140,10 @@ function DiseaseDetection() {
                   <div className="h-2 rounded skeleton w-full" />
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-4" style={{ fontSize: 13, color: "#6b7280" }}>
+              <div
+                className="flex items-center gap-2 mt-4"
+                style={{ fontSize: 13, color: "#6b7280" }}
+              >
                 <Loader2 size={14} className="animate-spin" /> {t("analysingLeaf")}
               </div>
             </Card>
@@ -141,33 +157,60 @@ function DiseaseDetection() {
   );
 }
 
-function ResultCard({ data, t, previewUrl }: { data: DiagnoseResponse; t: (key: string) => string; previewUrl: string | null }) {
+function ResultCard({
+  data,
+  t,
+  previewUrl,
+}: {
+  data: DiagnoseResponse;
+  t: (key: string) => string;
+  previewUrl: string | null;
+}) {
   if (data.status === "uncertain") {
     return (
       <Card>
         <div className="flex items-start gap-4 py-4 text-center flex-col items-center">
-            <div className="rounded-full flex items-center justify-center mb-2" style={{ width: 64, height: 64, background: "#fef2f2" }}>
-              <Shield size={32} strokeWidth={1.5} style={{ color: "#dc2626" }} />
-            </div>
-            <h2 style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a" }}>Uncertain Result</h2>
-            <p style={{ fontSize: 14, color: "#6b7280" }}>{data.message}</p>
-            <button className="mt-2 flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer" style={{ background: "#fef3c7", color: "#92400e", fontSize: 14, border: "1px solid #fde68a" }}>
-              <Shield size={16} /> Consult Agronomist
-            </button>
+          <div
+            className="rounded-full flex items-center justify-center mb-2"
+            style={{ width: 64, height: 64, background: "#fef2f2" }}
+          >
+            <Shield size={32} strokeWidth={1.5} style={{ color: "#dc2626" }} />
+          </div>
+          <h2 style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a" }}>Uncertain Result</h2>
+          <p style={{ fontSize: 14, color: "#6b7280" }}>{data.message}</p>
+          <button
+            className="mt-2 flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer"
+            style={{
+              background: "#fef3c7",
+              color: "#92400e",
+              fontSize: 14,
+              border: "1px solid #fde68a",
+            }}
+          >
+            <Shield size={16} /> Consult Agronomist
+          </button>
         </div>
       </Card>
     );
   }
 
   // Map severity string from backend to our component format
-  const severityLevel = data.severity === "moderate" ? "med" : 
-                        data.severity === "severe" ? "high" : 
-                        data.severity === "none" ? "low" : "low";
+  const severityLevel =
+    data.severity === "moderate"
+      ? "med"
+      : data.severity === "severe"
+        ? "high"
+        : data.severity === "none"
+          ? "low"
+          : "low";
 
   return (
     <Card>
       <div className="flex items-start gap-4">
-        <div className="rounded-lg flex items-center justify-center overflow-hidden" style={{ width: 120, height: 120, background: "#f0f5ea", flexShrink: 0 }}>
+        <div
+          className="rounded-lg flex items-center justify-center overflow-hidden"
+          style={{ width: 120, height: 120, background: "#f0f5ea", flexShrink: 0 }}
+        >
           {previewUrl ? (
             <img src={previewUrl} alt="Analyzed leaf" className="w-full h-full object-cover" />
           ) : (
@@ -176,15 +219,32 @@ function ResultCard({ data, t, previewUrl }: { data: DiagnoseResponse; t: (key: 
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h2 style={{ fontSize: 18, fontWeight: 500, color: "#1a1a1a", textTransform: "capitalize" }}>
-              {data.plant && data.plant !== "Unknown Plant" ? `${data.plant.replace(/_/g, " ")} - ` : ""}
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 500,
+                color: "#1a1a1a",
+                textTransform: "capitalize",
+              }}
+            >
+              {data.plant && data.plant !== "Unknown Plant"
+                ? `${data.plant.replace(/_/g, " ")} - `
+                : ""}
               {(data.disease || "Healthy").replace(/_/g, " ")}
             </h2>
             <SeverityBadge level={severityLevel} />
           </div>
-          
+
           {data.confidence < 60 && (
-            <button className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer" style={{ background: "#fef3c7", color: "#92400e", fontSize: 13, border: "1px solid #fde68a" }}>
+            <button
+              className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer"
+              style={{
+                background: "#fef3c7",
+                color: "#92400e",
+                fontSize: 13,
+                border: "1px solid #fde68a",
+              }}
+            >
               <Shield size={14} /> Consult Agronomist
             </button>
           )}
@@ -196,13 +256,25 @@ function ResultCard({ data, t, previewUrl }: { data: DiagnoseResponse; t: (key: 
           <Section icon={<Bug size={14} />} title={t("likelyCause") || "Cause"} body={data.cause} />
         )}
         {data.organic_treatment && (
-          <Section icon={<Sprout size={14} />} title={t("organicTreatment") || "Organic Treatment"} body={data.organic_treatment} />
+          <Section
+            icon={<Sprout size={14} />}
+            title={t("organicTreatment") || "Organic Treatment"}
+            body={data.organic_treatment}
+          />
         )}
         {data.chemical_treatment && (
-          <Section icon={<FlaskConical size={14} />} title={t("chemicalTreatment") || "Chemical Treatment"} body={data.chemical_treatment} />
+          <Section
+            icon={<FlaskConical size={14} />}
+            title={t("chemicalTreatment") || "Chemical Treatment"}
+            body={data.chemical_treatment}
+          />
         )}
         {data.prevention_tips && (
-          <Section icon={<Shield size={14} />} title={t("preventionTips") || "Prevention Tips"} body={data.prevention_tips} />
+          <Section
+            icon={<Shield size={14} />}
+            title={t("preventionTips") || "Prevention Tips"}
+            body={data.prevention_tips}
+          />
         )}
       </div>
     </Card>

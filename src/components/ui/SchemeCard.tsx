@@ -2,11 +2,11 @@ import { FileText, ExternalLink } from "lucide-react";
 import { useTranslation } from "../../contexts/LanguageContext";
 
 const categoryColors: Record<string, { bg: string; color: string }> = {
-  subsidies:     { bg: "#f0f5ea", color: "#3b6d11" },
-  insurance:     { bg: "#dbeafe", color: "#1e40af" },
-  credit:        { bg: "#ede9fe", color: "#5b21b6" },
+  subsidies: { bg: "#f0f5ea", color: "#3b6d11" },
+  insurance: { bg: "#dbeafe", color: "#1e40af" },
+  credit: { bg: "#ede9fe", color: "#5b21b6" },
   irrigationTab: { bg: "#dcfce7", color: "#166534" },
-  seeds:         { bg: "#ffedd5", color: "#9a3412" },
+  seeds: { bg: "#ffedd5", color: "#9a3412" },
 };
 
 export function SchemeCard({
@@ -97,8 +97,12 @@ export function SchemeCard({
             textDecoration: "none",
             cursor: "pointer",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.textDecoration = "underline";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.textDecoration = "none";
+          }}
         >
           {t("learnMore")} <ExternalLink size={12} strokeWidth={1.75} />
         </a>

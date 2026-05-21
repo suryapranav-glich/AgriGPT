@@ -1,8 +1,18 @@
 import { useRef, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  Home, Scan, MessageSquare, Droplets, TrendingUp,
-  FileText, Layers, Mic, Leaf, ChevronLeft, ChevronRight, X,
+  Home,
+  Scan,
+  MessageSquare,
+  Droplets,
+  TrendingUp,
+  FileText,
+  Layers,
+  Mic,
+  Leaf,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import { useSidebar } from "../../contexts/SidebarContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -31,7 +41,14 @@ export function Sidebar() {
   const userBtnRef = useRef<HTMLButtonElement>(null);
 
   const width = open ? 240 : 64;
-  const initials = user ? user.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase() : "";
+  const initials = user
+    ? user.name
+        .split(" ")
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "";
 
   const content = (isMobile: boolean) => (
     <aside
@@ -43,8 +60,13 @@ export function Sidebar() {
         transition: "width 200ms ease",
       }}
     >
-      <div className="flex items-center gap-2 px-3 h-14 border-b"
-           style={{ borderColor: "var(--c-border)", justifyContent: open || isMobile ? "space-between" : "center" }}>
+      <div
+        className="flex items-center gap-2 px-3 h-14 border-b"
+        style={{
+          borderColor: "var(--c-border)",
+          justifyContent: open || isMobile ? "space-between" : "center",
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <Leaf size={20} style={{ color: "#3b6d11", flexShrink: 0 }} strokeWidth={1.75} />
           {(open || isMobile) && (
@@ -64,9 +86,11 @@ export function Sidebar() {
             className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-[#f0f5ea]"
             aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
           >
-            {open
-              ? <ChevronLeft size={18} strokeWidth={1.75} style={{ color: "var(--c-muted)" }} />
-              : <ChevronRight size={18} strokeWidth={1.75} style={{ color: "var(--c-muted)" }} />}
+            {open ? (
+              <ChevronLeft size={18} strokeWidth={1.75} style={{ color: "var(--c-muted)" }} />
+            ) : (
+              <ChevronRight size={18} strokeWidth={1.75} style={{ color: "var(--c-muted)" }} />
+            )}
           </button>
         )}
       </div>
@@ -77,8 +101,12 @@ export function Sidebar() {
           const Icon = item.icon;
           const collapsed = !open && !isMobile;
           return (
-            <div key={item.to} className="relative"
-                 onMouseEnter={() => setHovered(item.to)} onMouseLeave={() => setHovered(null)}>
+            <div
+              key={item.to}
+              className="relative"
+              onMouseEnter={() => setHovered(item.to)}
+              onMouseLeave={() => setHovered(null)}
+            >
               <Link
                 to={item.to}
                 onClick={() => isMobile && setMobileOpen(false)}
@@ -100,10 +128,12 @@ export function Sidebar() {
                 <div
                   className="absolute z-50 rounded-md px-2.5 py-1.5 whitespace-nowrap"
                   style={{
-                    left: 60, top: 6,
+                    left: 60,
+                    top: 6,
                     background: "var(--c-bg)",
                     border: "1px solid var(--c-border)",
-                    fontSize: 13, color: "var(--c-ink)",
+                    fontSize: 13,
+                    color: "var(--c-ink)",
                   }}
                 >
                   {t(item.labelKey)}
@@ -119,25 +149,43 @@ export function Sidebar() {
           ref={userBtnRef}
           onClick={() => setProfileOpen((v) => !v)}
           className="w-full flex items-center gap-2.5 px-3 py-3 hover:bg-[var(--c-hover)]"
-          style={{ justifyContent: (!open && !isMobile) ? "center" : "flex-start" }}
+          style={{ justifyContent: !open && !isMobile ? "center" : "flex-start" }}
         >
           {user ? (
-            <div className="rounded-full flex items-center justify-center flex-shrink-0"
-                 style={{ width: 32, height: 32, background: "#f0f5ea", color: "#3b6d11", fontSize: 13, fontWeight: 500 }}>
+            <div
+              className="rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 32,
+                height: 32,
+                background: "#f0f5ea",
+                color: "#3b6d11",
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
               {initials}
             </div>
-          ) : <NoUserAvatar />}
+          ) : (
+            <NoUserAvatar />
+          )}
           {(open || isMobile) && user && (
             <div className="flex-1 min-w-0 text-left">
-              <div className="truncate" style={{ fontSize: 13, fontWeight: 500, color: "var(--c-ink)" }}>{user.name}</div>
-              <div className="truncate" style={{ fontSize: 12, color: "var(--c-muted)" }}>{user.location ?? user.email}</div>
+              <div
+                className="truncate"
+                style={{ fontSize: 13, fontWeight: 500, color: "var(--c-ink)" }}
+              >
+                {user.name}
+              </div>
+              <div className="truncate" style={{ fontSize: 12, color: "var(--c-muted)" }}>
+                {user.location ?? user.email}
+              </div>
             </div>
           )}
         </button>
         {profileOpen && (
           <ProfileDropdown
             anchor={userBtnRef.current}
-            position={(!open && !isMobile) ? "right" : "top-right"}
+            position={!open && !isMobile ? "right" : "top-right"}
             onClose={() => setProfileOpen(false)}
           />
         )}
@@ -147,7 +195,10 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="hidden md:block fixed left-0 top-0 h-screen z-30" style={{ width, transition: "width 200ms ease" }}>
+      <div
+        className="hidden md:block fixed left-0 top-0 h-screen z-30"
+        style={{ width, transition: "width 200ms ease" }}
+      >
         {content(false)}
       </div>
       {mobileOpen && (
@@ -157,9 +208,7 @@ export function Sidebar() {
             style={{ background: "rgba(0,0,0,0.3)" }}
             onClick={() => setMobileOpen(false)}
           />
-          <div className="md:hidden fixed left-0 top-0 h-screen z-50">
-            {content(true)}
-          </div>
+          <div className="md:hidden fixed left-0 top-0 h-screen z-50">{content(true)}</div>
         </>
       )}
     </>
@@ -174,8 +223,10 @@ export function OpenSidebarButton() {
       onClick={() => setOpen(true)}
       className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md"
       style={{
-        background: "var(--c-bg)", border: "1px solid var(--c-border)",
-        fontSize: 13, color: "var(--c-ink)",
+        background: "var(--c-bg)",
+        border: "1px solid var(--c-border)",
+        fontSize: 13,
+        color: "var(--c-ink)",
       }}
     >
       <ChevronRight size={14} strokeWidth={1.75} />

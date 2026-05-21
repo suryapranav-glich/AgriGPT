@@ -4,8 +4,14 @@ import { Header } from "./Header";
 import { useSidebar } from "../../contexts/SidebarContext";
 
 export function PageWrapper({
-  title, children, fullBleed = false,
-}: { title: string; children: ReactNode; fullBleed?: boolean }) {
+  title,
+  children,
+  fullBleed = false,
+}: {
+  title: string;
+  children: ReactNode;
+  fullBleed?: boolean;
+}) {
   const { open } = useSidebar();
   return (
     <div className="min-h-screen" style={{ background: "var(--c-bg)", color: "var(--c-ink)" }}>

@@ -32,6 +32,10 @@ from fertilizer.router import router as fertilizer_router
 from schemes.rag_engine import load_schemes_engine
 from schemes.router import router as schemes_router
 
+# ── Feature 7: Crop Price Prediction & Market Advisor ────────────────────────
+from market import load_market_graph
+from market import router as market_router
+
 # ── Disease knowledge base (unchanged) ───────────────────────────────────────
 DISEASE_INFO = {
     "Tomato___Early_blight": {
@@ -179,6 +183,9 @@ app.include_router(fertilizer_router)
 # ── Include Feature 6 router ──────────────────────────────────────────────────
 app.include_router(schemes_router)
 
+# ── Include Feature 7 router ──────────────────────────────────────────────────
+app.include_router(market_router)
+
 
 # =============================================================================
 # STARTUP — load models
@@ -210,6 +217,14 @@ async def startup_event():
         print("[AgriGPT] Government schemes RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Government schemes RAG skipped: {e}")
+
+    # Feature 7: Market Advisor Graph
+    print("[AgriGPT] Loading market advisor graph…")
+    try:
+        load_market_graph()
+        print("[AgriGPT] Market advisor graph ready.")
+    except Exception as e:
+        print(f"[AgriGPT] [WARNING] Market advisor graph skipped: {e}")
 
 
 _model       = None
@@ -353,7 +368,7 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured. Set it in backend/.env")
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
     async def generate():
         use_fallback = False

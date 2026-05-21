@@ -30,7 +30,15 @@ export function Card({
 // ── Label ─────────────────────────────────────────────────────────────────────
 export function Label({ children }: { children: ReactNode }) {
   return (
-    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--c-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    <div
+      style={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: "var(--c-muted)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+      }}
+    >
       {children}
     </div>
   );
@@ -134,8 +142,12 @@ export function Button({
         transition: "opacity 0.15s",
         ...styleProp,
       }}
-      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.opacity = "0.88"; }}
-      onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.opacity = "1"; }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.opacity = "0.88";
+      }}
+      onMouseLeave={(e) => {
+        if (!disabled) e.currentTarget.style.opacity = "1";
+      }}
     >
       {children}
     </button>
@@ -164,8 +176,12 @@ export const Input = forwardRef<
         boxSizing: "border-box",
         ...style,
       }}
-      onFocus={(e) => { e.currentTarget.style.borderColor = "#3b6d11"; }}
-      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--c-border)"; }}
+      onFocus={(e) => {
+        e.currentTarget.style.borderColor = "#3b6d11";
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.borderColor = "var(--c-border)";
+      }}
     />
   );
 });

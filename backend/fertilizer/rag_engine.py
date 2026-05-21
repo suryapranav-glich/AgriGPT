@@ -29,8 +29,8 @@ CHUNKS_PATH = BASE_DIR / "data" / "faiss_index" / "chunks.json"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 TOP_K       = 6
 
-# Gemini model — gemini-2.5-flash is free tier (15 req/min, 1M tokens/day)
-LLM_MODEL   = "gemini-2.5-flash"
+# Gemini model — gemini-2.5-flash-lite is free tier
+LLM_MODEL   = "gemini-2.5-flash-lite"
 
 # ── Module-level singletons ───────────────────────────────────────────────────
 _index    = None

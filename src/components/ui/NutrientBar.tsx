@@ -1,11 +1,11 @@
 const statusMap = {
-  ok:  { bar: "#3b6d11" },
+  ok: { bar: "#3b6d11" },
   low: { bar: "#f59e0b" },
   def: { bar: "#e24b4a" },
 };
 
 const defaultLabels = {
-  ok:  "Good",
+  ok: "Good",
   low: "Low",
   def: "Deficient",
 };

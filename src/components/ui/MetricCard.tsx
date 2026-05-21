@@ -52,9 +52,7 @@ export function MetricCard({
       <div style={{ fontSize: 20, fontWeight: 500, color: "var(--c-ink)", marginTop: 10 }}>
         {value}
       </div>
-      {sub && (
-        <div style={{ fontSize: 12, color: "var(--c-muted)", marginTop: 3 }}>{sub}</div>
-      )}
+      {sub && <div style={{ fontSize: 12, color: "var(--c-muted)", marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }

@@ -34,13 +34,17 @@ export function HeaderLanguage() {
           style={{
             background: "var(--c-bg)",
             border: "1px solid var(--c-border)",
-            maxHeight: 280, width: 240,
+            maxHeight: 280,
+            width: 240,
           }}
         >
           {LANGUAGES.map((l) => (
             <button
               key={l.code}
-              onClick={() => { setLang(l.code as LangCode); setOpen(false); }}
+              onClick={() => {
+                setLang(l.code as LangCode);
+                setOpen(false);
+              }}
               className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--c-hover)]"
               style={{
                 fontSize: 13,
@@ -50,7 +54,9 @@ export function HeaderLanguage() {
             >
               <span>{l.flag}</span>
               <span style={{ minWidth: 80 }}>{l.native}</span>
-              <span className="flex-1 text-left" style={{ color: "var(--c-muted)", fontSize: 12 }}>{l.name}</span>
+              <span className="flex-1 text-left" style={{ color: "var(--c-muted)", fontSize: 12 }}>
+                {l.name}
+              </span>
               {l.code === lang && <Check size={14} style={{ color: "#3b6d11" }} />}
             </button>
           ))}

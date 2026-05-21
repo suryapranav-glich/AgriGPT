@@ -1,10 +1,10 @@
 const agentConfig = {
   disease: { label: "Disease Agent", bg: "#fef3c7", color: "#92400e" },
   weather: { label: "Weather Agent", bg: "#dbeafe", color: "#1e40af" },
-  market:  { label: "Market Agent",  bg: "#dcfce7", color: "#166534" },
-  scheme:  { label: "Scheme Agent",  bg: "#ede9fe", color: "#5b21b6" },
-  soil:    { label: "Soil Agent",    bg: "#ffedd5", color: "#9a3412" },
-  general: { label: "AgriGPT",       bg: "#f0f5ea", color: "#3b6d11" },
+  market: { label: "Market Agent", bg: "#dcfce7", color: "#166534" },
+  scheme: { label: "Scheme Agent", bg: "#ede9fe", color: "#5b21b6" },
+  soil: { label: "Soil Agent", bg: "#ffedd5", color: "#9a3412" },
+  general: { label: "AgriGPT", bg: "#f0f5ea", color: "#3b6d11" },
   fertilizer: { label: "Fertilizer Agent", bg: "#fce7f3", color: "#9d174d" },
 } as const;
 

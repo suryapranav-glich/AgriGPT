@@ -48,11 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (u: User) => persist(u);
   const signup = (u: User) => persist(u);
   const loginWithGoogle = () =>
-    persist({ name: "Demo Farmer", email: "demo@agrigpt.in", language: "en", location: "Karnataka" });
+    persist({
+      name: "Demo Farmer",
+      email: "demo@agrigpt.in",
+      language: "en",
+      location: "Karnataka",
+    });
   const logout = () => persist(null);
 
   return (
-    <Ctx.Provider value={{ user, isAuthenticated: !!user, ready, login, signup, loginWithGoogle, logout }}>
+    <Ctx.Provider
+      value={{ user, isAuthenticated: !!user, ready, login, signup, loginWithGoogle, logout }}
+    >
       {children}
     </Ctx.Provider>
   );

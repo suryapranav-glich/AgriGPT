@@ -11,8 +11,8 @@ export const Route = createFileRoute("/soil")({ component: Soil });
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Texture = "sandy" | "loamy" | "clay" | "black";
-type Grade   = "A" | "B" | "C" | "D";
-type Status  = "ok" | "low" | "def";
+type Grade = "A" | "B" | "C" | "D";
+type Status = "ok" | "low" | "def";
 
 interface SoilResult {
   grade: Grade;
@@ -35,18 +35,24 @@ interface SoilResult {
 function getNutrientStatus(n: number, p: number, k: number) {
   return {
     nStatus: (n < 120 ? "def" : n < 180 ? "low" : "ok") as Status,
-    pStatus: (p < 15  ? "def" : p < 30  ? "low" : "ok") as Status,
+    pStatus: (p < 15 ? "def" : p < 30 ? "low" : "ok") as Status,
     kStatus: (k < 100 ? "def" : k < 160 ? "low" : "ok") as Status,
   };
 }
 
 function computeGrade(ph: number, n: number, p: number, k: number): Grade {
   let score = 0;
-  if (ph >= 6 && ph <= 7.5)        score += 25;
-  else if (ph >= 5.5 && ph <= 8)   score += 12;
-  if (n >= 200)       score += 25; else if (n >= 150) score += 18; else if (n >= 100) score += 10;
-  if (p >= 30)        score += 25; else if (p >= 20)  score += 18; else if (p >= 10)  score += 10;
-  if (k >= 200)       score += 25; else if (k >= 120) score += 18; else if (k >= 80)  score += 10;
+  if (ph >= 6 && ph <= 7.5) score += 25;
+  else if (ph >= 5.5 && ph <= 8) score += 12;
+  if (n >= 200) score += 25;
+  else if (n >= 150) score += 18;
+  else if (n >= 100) score += 10;
+  if (p >= 30) score += 25;
+  else if (p >= 20) score += 18;
+  else if (p >= 10) score += 10;
+  if (k >= 200) score += 25;
+  else if (k >= 120) score += 18;
+  else if (k >= 80) score += 10;
   if (score >= 85) return "A";
   if (score >= 65) return "B";
   if (score >= 45) return "C";
@@ -75,9 +81,18 @@ function parseCropLine(line: string): { name: string; pct: number } | null {
 // ─── AI streaming helper ──────────────────────────────────────────────────────
 
 async function streamSoilAnalysis(
-  ph: number, n: number, p: number, k: number, texture: string, grade: Grade,
+  ph: number,
+  n: number,
+  p: number,
+  k: number,
+  texture: string,
+  grade: Grade,
   lang: string,
-  onUpdate: (crops: Array<{name:string;pct:number}>, deficiencies: string, plan: string) => void
+  onUpdate: (
+    crops: Array<{ name: string; pct: number }>,
+    deficiencies: string,
+    plan: string,
+  ) => void,
 ) {
   const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
   const resp = await fetch(`${api_url}/soil/analyse`, {
@@ -106,34 +121,37 @@ async function streamSoilAnalysis(
         if (parsed.type === "content_block_delta" && parsed.delta?.text) {
           fullText += parsed.delta.text;
         }
-      } catch { /* skip malformed SSE lines */ }
+      } catch {
+        /* skip malformed SSE lines */
+      }
     }
 
     // Parse sections from the accumulated text and emit partial updates
-    const cropsMatch = fullText.match(/TOP 3 CROPS:([\s\S]*?)(?=DEFICIENCIES:|IMPROVEMENT PLAN:|$)/i);
-    const defMatch   = fullText.match(/DEFICIENCIES:([\s\S]*?)(?=IMPROVEMENT PLAN:|$)/i);
-    const planMatch  = fullText.match(/IMPROVEMENT PLAN:([\s\S]*?)$/i);
+    const cropsMatch = fullText.match(
+      /TOP 3 CROPS:([\s\S]*?)(?=DEFICIENCIES:|IMPROVEMENT PLAN:|$)/i,
+    );
+    const defMatch = fullText.match(/DEFICIENCIES:([\s\S]*?)(?=IMPROVEMENT PLAN:|$)/i);
+    const planMatch = fullText.match(/IMPROVEMENT PLAN:([\s\S]*?)$/i);
 
-    const crops: Array<{name:string;pct:number}> = [];
+    const crops: Array<{ name: string; pct: number }> = [];
     if (cropsMatch) {
-      cropsMatch[1].trim().split("\n").forEach(line => {
-        const c = parseCropLine(line);
-        if (c) crops.push(c);
-      });
+      cropsMatch[1]
+        .trim()
+        .split("\n")
+        .forEach((line) => {
+          const c = parseCropLine(line);
+          if (c) crops.push(c);
+        });
     }
 
-    onUpdate(
-      crops,
-      defMatch  ? defMatch[1].trim()  : "",
-      planMatch ? planMatch[1].trim() : "",
-    );
+    onUpdate(crops, defMatch ? defMatch[1].trim() : "", planMatch ? planMatch[1].trim() : "");
   }
 }
 
 // ─── Status translation key mapping ──────────────────────────────────────────
 
 const STATUS_TRANSLATION_KEYS: Record<Status, string> = {
-  ok:  "statusGood",
+  ok: "statusGood",
   low: "statusLow",
   def: "statusDeficient",
 };
@@ -143,20 +161,20 @@ const STATUS_TRANSLATION_KEYS: Record<Status, string> = {
 function Soil() {
   const { t, lang } = useTranslation();
 
-  const [texture, setTexture]           = useState<Texture>("loamy");
-  const [loading, setLoading]           = useState(false);
-  const [error, setError]               = useState<string | null>(null);
-  const [result, setResult]             = useState<SoilResult | null>(null);
+  const [texture, setTexture] = useState<Texture>("loamy");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SoilResult | null>(null);
 
   // AI streaming state (separate from static result so it streams in)
-  const [aiCrops, setAiCrops]           = useState<Array<{name:string;pct:number}>>([]);
-  const [aiDef, setAiDef]               = useState("");
-  const [aiPlan, setAiPlan]             = useState("");
+  const [aiCrops, setAiCrops] = useState<Array<{ name: string; pct: number }>>([]);
+  const [aiDef, setAiDef] = useState("");
+  const [aiPlan, setAiPlan] = useState("");
 
-  const phRef  = useRef<HTMLInputElement>(null);
-  const nRef   = useRef<HTMLInputElement>(null);
-  const pRef   = useRef<HTMLInputElement>(null);
-  const kRef   = useRef<HTMLInputElement>(null);
+  const phRef = useRef<HTMLInputElement>(null);
+  const nRef = useRef<HTMLInputElement>(null);
+  const pRef = useRef<HTMLInputElement>(null);
+  const kRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -165,10 +183,10 @@ function Soil() {
     setAiDef("");
     setAiPlan("");
 
-    const ph = parseFloat(phRef.current?.value  ?? "6.4");
-    const n  = parseInt(nRef.current?.value      ?? "180");
-    const p  = parseInt(pRef.current?.value      ?? "22");
-    const k  = parseInt(kRef.current?.value      ?? "140");
+    const ph = parseFloat(phRef.current?.value ?? "6.4");
+    const n = parseInt(nRef.current?.value ?? "180");
+    const p = parseInt(pRef.current?.value ?? "22");
+    const k = parseInt(kRef.current?.value ?? "140");
 
     const grade = computeGrade(ph, n, p, k);
     const { nStatus, pStatus, kStatus } = getNutrientStatus(n, p, k);
@@ -184,21 +202,18 @@ function Soil() {
       nStatus,
       pStatus,
       kStatus,
-      crops: [],        // filled by AI stream
+      crops: [], // filled by AI stream
       deficiencies: "", // filled by AI stream
       improvementPlan: "",
     });
 
     setLoading(true);
     try {
-      await streamSoilAnalysis(
-        ph, n, p, k, texture, grade, lang,
-        (crops, def, plan) => {
-          setAiCrops(crops);
-          setAiDef(def);
-          setAiPlan(plan);
-        }
-      );
+      await streamSoilAnalysis(ph, n, p, k, texture, grade, lang, (crops, def, plan) => {
+        setAiCrops(crops);
+        setAiDef(def);
+        setAiPlan(plan);
+      });
     } catch (err) {
       setError((err as Error).message ?? "Failed to fetch AI recommendations");
     } finally {
@@ -211,23 +226,21 @@ function Soil() {
   return (
     <PageWrapper title={t("soilAnalyzer")}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
         {/* ── Input card ─────────────────────────────────────────── */}
         <Card>
           <Label>{t("soilParameters")}</Label>
           <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
-
             <Field label={t("ph")}>
               <Input ref={phRef} type="number" step="0.1" defaultValue={6.4} min={0} max={14} />
             </Field>
             <Field label={t("nitrogen")}>
-              <Input ref={nRef}  type="number" step="1"   defaultValue={180} min={0} />
+              <Input ref={nRef} type="number" step="1" defaultValue={180} min={0} />
             </Field>
             <Field label={t("phosphorus")}>
-              <Input ref={pRef}  type="number" step="1"   defaultValue={22}  min={0} />
+              <Input ref={pRef} type="number" step="1" defaultValue={22} min={0} />
             </Field>
             <Field label={t("potassium")}>
-              <Input ref={kRef}  type="number" step="1"   defaultValue={140} min={0} />
+              <Input ref={kRef} type="number" step="1" defaultValue={140} min={0} />
             </Field>
 
             <div>
@@ -238,9 +251,9 @@ function Soil() {
                     key={tItem}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer"
                     style={{
-                      border:     `1px solid ${texture === tItem ? "#3b6d11" : "#e5e7eb"}`,
+                      border: `1px solid ${texture === tItem ? "#3b6d11" : "#e5e7eb"}`,
                       background: texture === tItem ? "#f0f5ea" : "#fff",
-                      color:      texture === tItem ? "#3b6d11" : "#1a1a1a",
+                      color: texture === tItem ? "#3b6d11" : "#1a1a1a",
                       fontSize: 13,
                     }}
                   >
@@ -271,11 +284,11 @@ function Soil() {
               <div
                 className="px-3 py-1 rounded-full"
                 style={{
-                  background:  "#f0f5ea",
-                  color:       "#3b6d11",
-                  fontSize:    32,
-                  fontWeight:  500,
-                  lineHeight:  1,
+                  background: "#f0f5ea",
+                  color: "#3b6d11",
+                  fontSize: 32,
+                  fontWeight: 500,
+                  lineHeight: 1,
                 }}
               >
                 {result.grade}
@@ -290,17 +303,33 @@ function Soil() {
 
             {/* Nutrient bars — from static local calculation */}
             <div className="mt-5 space-y-3">
-              <NutrientBar label={t("nitrogen")}   value={result.n} max={280} status={result.nStatus} statusLabel={t(STATUS_TRANSLATION_KEYS[result.nStatus])} />
-              <NutrientBar label={t("phosphorus")} value={result.p}  max={60}  status={result.pStatus} statusLabel={t(STATUS_TRANSLATION_KEYS[result.pStatus])} />
-              <NutrientBar label={t("potassium")}  value={result.k} max={280} status={result.kStatus} statusLabel={t(STATUS_TRANSLATION_KEYS[result.kStatus])} />
+              <NutrientBar
+                label={t("nitrogen")}
+                value={result.n}
+                max={280}
+                status={result.nStatus}
+                statusLabel={t(STATUS_TRANSLATION_KEYS[result.nStatus])}
+              />
+              <NutrientBar
+                label={t("phosphorus")}
+                value={result.p}
+                max={60}
+                status={result.pStatus}
+                statusLabel={t(STATUS_TRANSLATION_KEYS[result.pStatus])}
+              />
+              <NutrientBar
+                label={t("potassium")}
+                value={result.k}
+                max={280}
+                status={result.kStatus}
+                statusLabel={t(STATUS_TRANSLATION_KEYS[result.kStatus])}
+              />
             </div>
 
             {/* Top crops — streamed from AI */}
             <div className="mt-5">
               <Label>{t("topRecommendedCrops")}</Label>
-              {aiCrops.length === 0 && loading && (
-                <LoadingDots />
-              )}
+              {aiCrops.length === 0 && loading && <LoadingDots />}
               {aiCrops.length > 0 && (
                 <ul className="mt-2 divide-y" style={{ borderColor: "#f5f5f5" }}>
                   {aiCrops.map(({ name, pct }) => (
@@ -310,7 +339,9 @@ function Soil() {
                       style={{ fontSize: 13 }}
                     >
                       <span style={{ color: "#1a1a1a" }}>{name}</span>
-                      <span style={{ color: "#639922" }}>{pct}% {t("suitability")}</span>
+                      <span style={{ color: "#639922" }}>
+                        {pct}% {t("suitability")}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -349,7 +380,12 @@ function Soil() {
             {error && (
               <div
                 className="mt-4 rounded-md p-3"
-                style={{ background: "#fef2f2", border: "1px solid #fecaca", fontSize: 13, color: "#b91c1c" }}
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  fontSize: 13,
+                  color: "#b91c1c",
+                }}
               >
                 {error}
               </div>

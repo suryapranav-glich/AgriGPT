@@ -1,4 +1,4 @@
-﻿export type LangCode = "en" | "te" | "hi";
+export type LangCode = "en" | "te" | "hi";
 
 export const LANGUAGES: { code: LangCode; name: string; native: string; flag: string }[] = [
   { code: "en", name: "English", native: "English", flag: "🇬🇧" },
@@ -212,6 +212,32 @@ const en: Dict = {
   couldNotFetch: "Could not fetch answer. Make sure the backend is running.",
   quotaExceeded: "AI quota reached for today (free tier: 20 req/day). Please try again tomorrow.",
   quotaRetry: "AI quota reached. Please retry in {s} seconds.",
+  
+  // Market Additional translations
+  holdStock: "Hold",
+  bestRate: "Best Rate",
+  rankedByBestRates: "Ranked by best selling rates",
+  dailyArrivals: "Daily Arrivals",
+  bullish: "Bullish",
+  bearish: "Bearish",
+  forecastModel: "Forecast Model",
+  peak: "Peak",
+  days: "days",
+  aiAgentDrafting: "AI Agent is drafting market advisory...",
+  rerun: "Re-run",
+  mandi: "Mandi",
+  qtl: "Qtl",
+  serviceUnavailable: "Service Unavailable",
+  historicalPrice: "Historical Price",
+  forecastedTrend: "Forecasted Trend",
+  confidenceRange80: "80% Confidence Range",
+  confidenceBand: "Confidence Band",
+  actualPrice: "Actual Price",
+  forecastedPrice: "Forecasted Price",
+  groundnut: "Groundnut",
+  soybean: "Soybean",
+  sugarcane: "Sugarcane",
+  wheat: "Wheat",
 };
 
 const te: Dict = {
@@ -405,6 +431,35 @@ const te: Dict = {
   couldNotFetch: "సమాధానం తెచ్చుకొనలేకపోయాం. బ్యాకెండ్ నడుస్తున్నదా అని నిర్ధారించండి.",
   quotaExceeded: "నేటి AI కోటా అయిపోయింది (ఉచిత స్థాయి: రోజుకు 20 అభ్యర్థనలు). దయచేసి రేపు మళ్ళీ ప్రయత్నించండి.",
   quotaRetry: "AI కోటా అయిపోయింది. {s} సెకన్ల తర్వాత మళ్ళీ ప్రయత్నించండి.",
+  
+  // Market Additional translations
+  holdStock: "నిల్వ ఉంచండి",
+  bestRate: "ఉత్తమ ధర",
+  rankedByBestRates: "అత్యుత్తమ విక్రయ ధరల ప్రకారం ర్యాంక్ చేయబడింది",
+  dailyArrivals: "రోజువారీ రాక",
+  bullish: "ధర పెరుగుదల",
+  bearish: "ధర తగ్గుదల",
+  forecastModel: "అంచనా నమూనా",
+  peak: "గరిష్ఠం",
+  days: "రోజులు",
+  aiAgentDrafting: "AI ఏజెంట్ మార్కెట్ సలహాను సిద్ధం చేస్తోంది...",
+  rerun: "మళ్లీ రన్ చేయండి",
+  mandi: "మండి",
+  qtl: "క్విం",
+  serviceUnavailable: "సేవ అందుబాటులో లేదు",
+  historicalPrice: "చారిత్రక ధర",
+  forecastedTrend: "అంచనా వేసిన ధోరణి",
+  confidenceRange80: "80% విశ్వసనీయ పరిధి",
+  confidenceBand: "విశ్వసనీయత బ్యాండ్",
+  actualPrice: "అసలు ధర",
+  forecastedPrice: "అంచనా ధర",
+  groundnut: "వేరుశనగ",
+  soybean: "సోయాబీన్",
+  sugarcane: "చెరకు",
+  wheat: "గోధుమ",
+  onion: "ఉల్లిపాయ",
+  paddy: "వరి",
+  cotton: "పత్తి",
 };
 
 const hi: Dict = {
@@ -600,6 +655,32 @@ const hi: Dict = {
   couldNotFetch: "उत्तर नहीं मिला. कृपया बैकेंड सर्वर चला हुआ है यह सुनिश्चित करें।",
   quotaExceeded: "आज की AI कोटा समाप्त हो गई (मुफ्त स्तर: 20 अनुरोध/दिन)। कृपया कल पुनः प्रयास करें।",
   quotaRetry: "AI कोटा समाप्त। {s} सेकंड में पुनः प्रयास करें।",
+  
+  // Market Additional translations
+  holdStock: "रोक कर रखें",
+  bestRate: "सर्वोत्तम दर",
+  rankedByBestRates: "सर्वोत्तम बिक्री दरों के आधार पर रैंक किया गया",
+  dailyArrivals: "दैनिक आवक",
+  bullish: "तेजी",
+  bearish: "मंदी",
+  forecastModel: "पूर्वानुमान मॉडल",
+  peak: "शिखर",
+  days: "दिन",
+  aiAgentDrafting: "एआई एजेंट बाजार सलाह का मसौदा तैयार कर रहा है...",
+  rerun: "पुनः चलाएं",
+  mandi: "मंडी",
+  qtl: "कुंतल",
+  serviceUnavailable: "सेवा अनुपलब्ध",
+  historicalPrice: "ऐतिहासिक मूल्य",
+  forecastedTrend: "पूर्वानुमानित प्रवृत्ति",
+  confidenceRange80: "80% विश्वास सीमा",
+  confidenceBand: "विश्वास बैंड",
+  actualPrice: "वास्तविक मूल्य",
+  forecastedPrice: "पूर्वानुमानित मूल्य",
+  groundnut: "मूंगफली",
+  soybean: "सोयाबीन",
+  sugarcane: "गन्ना",
+  wheat: "गेहूं",
 };
 
 export const translations: Record<LangCode, Dict> = {

@@ -44,15 +44,18 @@ function Irrigation() {
       let matchedName = locInput;
 
       let geoRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanName)}&count=1&language=en&format=json`
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanName)}&count=1&language=en&format=json`,
       );
       let geoData = await geoRes.json();
 
       // If spelling ends with 'y' (e.g. Kamareddy) and not found, fallback to 'i' (Kamareddi)
-      if ((!geoData.results || geoData.results.length === 0) && cleanName.toLowerCase().endsWith("y")) {
+      if (
+        (!geoData.results || geoData.results.length === 0) &&
+        cleanName.toLowerCase().endsWith("y")
+      ) {
         const altName = cleanName.slice(0, -1) + "i";
         geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(altName)}&count=1&language=en&format=json`
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(altName)}&count=1&language=en&format=json`,
         );
         geoData = await geoRes.json();
       }
@@ -67,7 +70,7 @@ function Irrigation() {
 
       // 2. Fetch daily weather forecast from Open-Meteo
       const weatherRes = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`,
       );
       const weatherData = await weatherRes.json();
 
@@ -100,7 +103,8 @@ function Irrigation() {
       // 3. Compute Reference ET (ET0) based on regional temperatures (Hargreaves approximation)
       const hiToday = parsedDays[0].hi;
       const loToday = parsedDays[0].lo;
-      const computedRefEt = Math.round((0.12 * hiToday + 0.1 * (hiToday - loToday) - 0.5) * 10) / 10;
+      const computedRefEt =
+        Math.round((0.12 * hiToday + 0.1 * (hiToday - loToday) - 0.5) * 10) / 10;
 
       // Heatwave alert if temperature >= 38°C or ET0 > 6.2 mm/day
       const hasHeatwave = hiToday >= 38 || computedRefEt > 6.2;
@@ -140,7 +144,7 @@ function Irrigation() {
     Kc = 1.05;
     cropLabel = "bulb-dev";
   } else if (appliedCrop === "Paddy") {
-    Kc = 1.20;
+    Kc = 1.2;
     cropLabel = "flooded";
   } else if (appliedCrop === "Cotton") {
     Kc = 1.15;
@@ -152,23 +156,17 @@ function Irrigation() {
 
   // Effective rainfall (from tomorrow's expected rain probability)
   const tomorrowRain = hasAppliedData ? days[1].rain : 0;
-  const effectiveRain = tomorrowRain > 50
-    ? Math.round(tomorrowRain * 0.15 * 10) / 10
-    : 0.0;
+  const effectiveRain = tomorrowRain > 50 ? Math.round(tomorrowRain * 0.15 * 10) / 10 : 0.0;
 
   // Net irrigation requirement
   const netIrrRequirement = Math.max(0, cropEt - effectiveRain);
 
   // Total water volume (Litres)
-  const totalWaterLitres = Math.round(
-    netIrrRequirement * appliedFieldSize * 4046.86
-  );
+  const totalWaterLitres = Math.round(netIrrRequirement * appliedFieldSize * 4046.86);
 
   // Recommendation strings
   const shouldIrrigate = netIrrRequirement > 0;
-  const recomTitle = shouldIrrigate
-    ? t("irrigateToday")
-    : t("doNotIrrigateToday");
+  const recomTitle = shouldIrrigate ? t("irrigateToday") : t("doNotIrrigateToday");
   const recomDesc = shouldIrrigate
     ? `Apply approximately ${netIrrRequirement.toFixed(1)} mm of water (${totalWaterLitres.toLocaleString()} Litres) to maintain optimal soil moisture for ${appliedCrop}.`
     : `Rain expected tomorrow (${tomorrowRain}% probability). Soil moisture currently adequate. Skip irrigation today.`;
@@ -181,10 +179,7 @@ function Irrigation() {
           style={{ background: "#fdf3e3", border: "1px solid #ba7517" }}
         >
           <div className="flex items-center gap-2">
-            <AlertTriangle
-              size={15}
-              style={{ color: "#ba7517", flexShrink: 0 }}
-            />
+            <AlertTriangle size={15} style={{ color: "#ba7517", flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500 }}>
               {t("heatwaveAlert")}
             </span>
@@ -313,12 +308,8 @@ function Irrigation() {
               borderLeft: "3px solid #3b6d11",
             }}
           >
-            <div style={{ fontSize: 20, fontWeight: 500, color: "#1a1a1a" }}>
-              {recomTitle}
-            </div>
-            <div style={{ fontSize: 14, color: "#6b7280", marginTop: 4 }}>
-              {recomDesc}
-            </div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: "#1a1a1a" }}>{recomTitle}</div>
+            <div style={{ fontSize: 14, color: "#6b7280", marginTop: 4 }}>{recomDesc}</div>
 
             <div className="mt-5">
               <Label>{t("etcCalculation")}</Label>
@@ -330,9 +321,7 @@ function Irrigation() {
                     [t("cropEt"), `${cropEt.toFixed(2)} mm/day`],
                     [
                       t("effectiveRain"),
-                      effectiveRain > 0
-                        ? `${effectiveRain} mm expected`
-                        : "0 mm expected",
+                      effectiveRain > 0 ? `${effectiveRain} mm expected` : "0 mm expected",
                     ],
                     [
                       t("netIrrRequirement"),
