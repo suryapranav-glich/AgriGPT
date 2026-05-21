@@ -27,6 +27,7 @@ const nav = [
   { to: "/market", labelKey: "marketPrices", icon: TrendingUp },
   { to: "/schemes", labelKey: "govtSchemes", icon: FileText },
   { to: "/soil", labelKey: "soilAnalyzer", icon: Layers },
+  { to: "/fertilizer", labelKey: "fertilizerRecommendation", icon: Leaf },
   { to: "/voice", labelKey: "voiceMode", icon: Mic },
 ];
 

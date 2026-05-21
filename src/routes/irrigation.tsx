@@ -14,6 +14,7 @@ function Irrigation() {
   // Input states initialized to empty strings
   const [locInput, setLocInput] = useState("");
   const [cropInput, setCropInput] = useState("Tomato");
+  const [growthStageInput, setGrowthStageInput] = useState("Vegetative");
   const [fieldSizeInput, setFieldSizeInput] = useState<number | "">("");
 
   // Single cohesive applied plan state (starts empty)
@@ -23,7 +24,13 @@ function Irrigation() {
     fieldSize: number;
     days: { d: string; rain: number; hi: number; lo: number }[];
     refEt: number;
+    kc: number;
+    cropEt: number;
+    effectiveRain: number;
+    netIrrigation: number;
+    totalWaterLitres: number;
     hasHeatwave: boolean;
+    bestWateringTime: string;
   } | null>(null);
 
   // Transition state
@@ -37,85 +44,40 @@ function Irrigation() {
 
     setIsCalculating(true);
     try {
-      // 1. Geocode location to get coordinates (Open-Meteo free geocoding API)
-      const cleanName = locInput.replace(/,.*$/, "").trim();
-      let lat = 13.13768; // fallback to Kolar coordinates
-      let lon = 78.12999;
-      let matchedName = locInput;
+      const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+      const res = await fetch(`${api_url}/irrigation/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: locInput,
+          crop: cropInput,
+          growth_stage: growthStageInput,
+          field_size: Number(fieldSizeInput)
+        })
+      });
 
-      let geoRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanName)}&count=1&language=en&format=json`,
-      );
-      let geoData = await geoRes.json();
+      if (!res.ok) throw new Error("Backend failed");
 
-      // If spelling ends with 'y' (e.g. Kamareddy) and not found, fallback to 'i' (Kamareddi)
-      if (
-        (!geoData.results || geoData.results.length === 0) &&
-        cleanName.toLowerCase().endsWith("y")
-      ) {
-        const altName = cleanName.slice(0, -1) + "i";
-        geoRes = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(altName)}&count=1&language=en&format=json`,
-        );
-        geoData = await geoRes.json();
-      }
-
-      if (geoData.results && geoData.results.length > 0) {
-        lat = geoData.results[0].latitude;
-        lon = geoData.results[0].longitude;
-        matchedName = `${geoData.results[0].name}, ${geoData.results[0].admin1 || geoData.results[0].country}`;
-      } else {
-        console.warn("Geocoding returned no results, using regional default coordinates.");
-      }
-
-      // 2. Fetch daily weather forecast from Open-Meteo
-      const weatherRes = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`,
-      );
-      const weatherData = await weatherRes.json();
-
-      if (!weatherData.daily) {
-        throw new Error("Invalid response structure from weather API.");
-      }
-
-      const daily = weatherData.daily;
-      const parsedDays = [
-        {
-          d: t("today"),
-          rain: daily.precipitation_probability_max[0] ?? 0,
-          hi: Math.round(daily.temperature_2m_max[0] ?? 30),
-          lo: Math.round(daily.temperature_2m_min[0] ?? 20),
-        },
-        {
-          d: t("tomorrow"),
-          rain: daily.precipitation_probability_max[1] ?? 0,
-          hi: Math.round(daily.temperature_2m_max[1] ?? 30),
-          lo: Math.round(daily.temperature_2m_min[1] ?? 20),
-        },
-        {
-          d: t("day3"),
-          rain: daily.precipitation_probability_max[2] ?? 0,
-          hi: Math.round(daily.temperature_2m_max[2] ?? 30),
-          lo: Math.round(daily.temperature_2m_min[2] ?? 20),
-        },
-      ];
-
-      // 3. Compute Reference ET (ET0) based on regional temperatures (Hargreaves approximation)
-      const hiToday = parsedDays[0].hi;
-      const loToday = parsedDays[0].lo;
-      const computedRefEt =
-        Math.round((0.12 * hiToday + 0.1 * (hiToday - loToday) - 0.5) * 10) / 10;
-
-      // Heatwave alert if temperature >= 38°C or ET0 > 6.2 mm/day
-      const hasHeatwave = hiToday >= 38 || computedRefEt > 6.2;
-
+      const data = await res.json();
+      
       setAppliedPlan({
-        loc: matchedName,
+        loc: data.location,
         crop: cropInput,
         fieldSize: Number(fieldSizeInput),
-        days: parsedDays,
-        refEt: computedRefEt,
-        hasHeatwave,
+        days: data.forecast_15_days.map((d: any, i: number) => ({
+          d: i === 0 ? t("today") : i === 1 ? t("tomorrow") : `${t("day")} ${i+1}`,
+          rain: d.rain_prob,
+          hi: d.t_max,
+          lo: d.t_min
+        })),
+        refEt: data.ref_et,
+        kc: data.kc,
+        cropEt: data.crop_et,
+        effectiveRain: data.effective_rain,
+        netIrrigation: data.net_irrigation,
+        totalWaterLitres: data.total_water_litres,
+        hasHeatwave: data.has_heatwave,
+        bestWateringTime: data.best_watering_time
       });
       setShowAlert(true);
     } catch (err) {
@@ -127,44 +89,18 @@ function Irrigation() {
   };
 
   const hasAppliedData = appliedPlan !== null;
-  const appliedLoc = appliedPlan ? appliedPlan.loc : "";
   const appliedCrop = appliedPlan ? appliedPlan.crop : "Tomato";
-  const appliedFieldSize = appliedPlan ? appliedPlan.fieldSize : 0;
   const days = appliedPlan ? appliedPlan.days : [];
   const refEt = appliedPlan ? appliedPlan.refEt : 0;
+  const kc = appliedPlan ? appliedPlan.kc : 0;
+  const cropEt = appliedPlan ? appliedPlan.cropEt : 0;
+  const effectiveRain = appliedPlan ? appliedPlan.effectiveRain : 0;
+  const netIrrRequirement = appliedPlan ? appliedPlan.netIrrigation : 0;
+  const totalWaterLitres = appliedPlan ? appliedPlan.totalWaterLitres : 0;
+  const bestWateringTime = appliedPlan ? appliedPlan.bestWateringTime : "";
   const hasHeatwave = appliedPlan ? appliedPlan.hasHeatwave : false;
 
-  // Crop coefficient (Kc) and label
-  let Kc = 1.15;
-  let cropLabel = "mid-stage";
-  if (appliedCrop === "Tomato") {
-    Kc = 1.15;
-    cropLabel = "mid-stage";
-  } else if (appliedCrop === "Onion") {
-    Kc = 1.05;
-    cropLabel = "bulb-dev";
-  } else if (appliedCrop === "Paddy") {
-    Kc = 1.2;
-    cropLabel = "flooded";
-  } else if (appliedCrop === "Cotton") {
-    Kc = 1.15;
-    cropLabel = "boll-dev";
-  }
-
-  // Crop ET (ETc)
-  const cropEt = refEt * Kc;
-
-  // Effective rainfall (from tomorrow's expected rain probability)
   const tomorrowRain = hasAppliedData ? days[1].rain : 0;
-  const effectiveRain = tomorrowRain > 50 ? Math.round(tomorrowRain * 0.15 * 10) / 10 : 0.0;
-
-  // Net irrigation requirement
-  const netIrrRequirement = Math.max(0, cropEt - effectiveRain);
-
-  // Total water volume (Litres)
-  const totalWaterLitres = Math.round(netIrrRequirement * appliedFieldSize * 4046.86);
-
-  // Recommendation strings
   const shouldIrrigate = netIrrRequirement > 0;
   const recomTitle = shouldIrrigate ? t("irrigateToday") : t("doNotIrrigateToday");
   const recomDesc = shouldIrrigate
@@ -199,7 +135,7 @@ function Irrigation() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3 items-end">
         <Card>
           <Label>{t("location")}</Label>
           <div className="flex items-center gap-2 mt-2">
@@ -222,6 +158,21 @@ function Irrigation() {
             <option value="Onion">{t("onion")}</option>
             <option value="Paddy">{t("paddy")}</option>
             <option value="Cotton">{t("cotton")}</option>
+          </Select>
+        </Card>
+        <Card>
+          <Label>{t("growthStage") || "Growth Stage"}</Label>
+          <Select
+            className="w-full mt-2"
+            value={growthStageInput}
+            onChange={(e) => setGrowthStageInput(e.target.value)}
+          >
+            <option value="Seedling">Seedling</option>
+            <option value="Vegetative">Vegetative</option>
+            <option value="Flowering">Flowering</option>
+            <option value="Bulb Development">Bulb Development</option>
+            <option value="Boll Development">Boll Development</option>
+            <option value="Maturity">Maturity</option>
           </Select>
         </Card>
         <Card>
@@ -267,9 +218,9 @@ function Irrigation() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+          <div className="flex gap-3 mt-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
             {days.map((f) => (
-              <Card key={f.d}>
+              <Card key={f.d} className="min-w-[140px] flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <Label>{f.d}</Label>
                   <span style={{ fontSize: 12, color: "#1a1a1a" }}>
@@ -312,12 +263,19 @@ function Irrigation() {
             <div style={{ fontSize: 14, color: "#6b7280", marginTop: 4 }}>{recomDesc}</div>
 
             <div className="mt-5">
+              <Label>{t("bestWateringTime") || "Best Watering Time"}</Label>
+              <div style={{ fontSize: 16, fontWeight: 500, color: "#1e40af", marginTop: 4 }}>
+                {bestWateringTime}
+              </div>
+            </div>
+
+            <div className="mt-5">
               <Label>{t("etcCalculation")}</Label>
               <table className="w-full mt-2 text-left">
                 <tbody style={{ fontSize: 13 }}>
                   {[
                     [t("refEt"), `${refEt.toFixed(1)} mm/day`],
-                    [t("cropCoeff"), `${Kc.toFixed(2)} (${cropLabel})`],
+                    [t("cropCoeff"), `${kc.toFixed(2)}`],
                     [t("cropEt"), `${cropEt.toFixed(2)} mm/day`],
                     [
                       t("effectiveRain"),

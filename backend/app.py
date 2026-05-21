@@ -32,6 +32,9 @@ from fertilizer.router import router as fertilizer_router
 from schemes.rag_engine import load_schemes_engine
 from schemes.router import router as schemes_router
 
+# ── Feature 5: Weather-Based Irrigation Planning (Agent 2) ───────────────────
+from irrigation.router import router as irrigation_router
+
 # ── Feature 7: Crop Price Prediction & Market Advisor ────────────────────────
 from market import load_market_graph
 from market import router as market_router
@@ -182,6 +185,9 @@ app.include_router(fertilizer_router)
 
 # ── Include Feature 6 router ──────────────────────────────────────────────────
 app.include_router(schemes_router)
+
+# ── Include Feature 5 router ──────────────────────────────────────────────────
+app.include_router(irrigation_router)
 
 # ── Include Feature 7 router ──────────────────────────────────────────────────
 app.include_router(market_router)
@@ -368,7 +374,7 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured. Set it in backend/.env")
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash-lite")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     async def generate():
         use_fallback = False

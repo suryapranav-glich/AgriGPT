@@ -43,7 +43,7 @@ FAISS_DIR  = BASE_DIR / "data" / "scheme_faiss"
 CHROMA_DIR = BASE_DIR / "data" / "scheme_chroma"
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
-LLM_MODEL   = "gemini-2.5-flash-lite"
+LLM_MODEL   = "gemini-2.5-flash"
 TOP_K       = 5
 
 # ── Singletons ────────────────────────────────────────────────────────────────

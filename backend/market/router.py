@@ -573,7 +573,7 @@ def get_llm():
     if GEMINI_API_KEY and HAS_LANGCHAIN:
         return ChatGoogleGenerativeAI(
             google_api_key=GEMINI_API_KEY,
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             temperature=0.3,
             streaming=True,
         )

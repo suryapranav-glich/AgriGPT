@@ -16,6 +16,7 @@ import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SchemesRouteImport } from './routes/schemes'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as IrrigationRouteImport } from './routes/irrigation'
+import { Route as FertilizerRouteImport } from './routes/fertilizer'
 import { Route as DiseaseRouteImport } from './routes/disease'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
@@ -55,6 +56,11 @@ const IrrigationRoute = IrrigationRouteImport.update({
   path: '/irrigation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FertilizerRoute = FertilizerRouteImport.update({
+  id: '/fertilizer',
+  path: '/fertilizer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DiseaseRoute = DiseaseRouteImport.update({
   id: '/disease',
   path: '/disease',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/disease': typeof DiseaseRoute
+  '/fertilizer': typeof FertilizerRoute
   '/irrigation': typeof IrrigationRoute
   '/market': typeof MarketRoute
   '/schemes': typeof SchemesRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/disease': typeof DiseaseRoute
+  '/fertilizer': typeof FertilizerRoute
   '/irrigation': typeof IrrigationRoute
   '/market': typeof MarketRoute
   '/schemes': typeof SchemesRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/disease': typeof DiseaseRoute
+  '/fertilizer': typeof FertilizerRoute
   '/irrigation': typeof IrrigationRoute
   '/market': typeof MarketRoute
   '/schemes': typeof SchemesRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/disease'
+    | '/fertilizer'
     | '/irrigation'
     | '/market'
     | '/schemes'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/disease'
+    | '/fertilizer'
     | '/irrigation'
     | '/market'
     | '/schemes'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/disease'
+    | '/fertilizer'
     | '/irrigation'
     | '/market'
     | '/schemes'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRoute
   DiseaseRoute: typeof DiseaseRoute
+  FertilizerRoute: typeof FertilizerRoute
   IrrigationRoute: typeof IrrigationRoute
   MarketRoute: typeof MarketRoute
   SchemesRoute: typeof SchemesRoute
@@ -211,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IrrigationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fertilizer': {
+      id: '/fertilizer'
+      path: '/fertilizer'
+      fullPath: '/fertilizer'
+      preLoaderRoute: typeof FertilizerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/disease': {
       id: '/disease'
       path: '/disease'
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DiseaseRoute: DiseaseRoute,
+  FertilizerRoute: FertilizerRoute,
   IrrigationRoute: IrrigationRoute,
   MarketRoute: MarketRoute,
   SchemesRoute: SchemesRoute,
