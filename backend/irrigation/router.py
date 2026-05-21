@@ -1,8 +1,14 @@
 import math
 import httpx
 import urllib.parse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
+import os
 from pydantic import BaseModel
+
+from auth.db import irrigation_logs_col
+from auth.utils import decode_token
+from bson import ObjectId
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/irrigation", tags=["Irrigation Planner"])
 
@@ -57,7 +63,7 @@ async def geocode_location(loc: str):
     return 13.13768, 78.12999, loc # Kolar fallback
 
 @router.post("/plan")
-async def get_irrigation_plan(req: IrrigationRequest):
+async def get_irrigation_plan(req: IrrigationRequest, authorization: str = Header(default="")):
     lat, lon, matched_name = await geocode_location(req.location)
     
     # Fetch 16-day daily forecast and 2-day hourly forecast for watering time
@@ -110,6 +116,37 @@ async def get_irrigation_plan(req: IrrigationRequest):
     best_time_window = "06:00 AM - 08:00 AM (Early Morning)"
     if morning_temps and evening_temps and min(evening_temps) < min(morning_temps):
         best_time_window = "05:00 PM - 07:00 PM (Late Evening)"
+
+    # Save to MongoDB
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        user_id = decode_token(token)
+
+    if user_id:
+        try:
+            now = datetime.now(timezone.utc)
+            # "Tomorrow" if morning, or specify next day
+            next_schedule = f"Tomorrow, {best_time_window}"
+            
+            irrigation_logs_col().insert_one({
+                "user_id": ObjectId(user_id),
+                "timestamp": now.isoformat(),
+                "crop": req.crop,
+                "location": matched_name,
+                "net_irrigation": round(net_irrigation, 1),
+                "next_schedule": next_schedule
+            })
+            
+            from auth.db import chat_history_col
+            chat_history_col().insert_one({
+                "user_id": ObjectId(user_id),
+                "agent": "weather",
+                "query": f"Generated irrigation plan for {req.crop}",
+                "created_at": now
+            })
+        except Exception as e:
+            print("Failed to save irrigation log:", e)
 
     return {
         "location": matched_name,

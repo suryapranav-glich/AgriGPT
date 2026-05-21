@@ -11,9 +11,13 @@
 # =============================================================================
 
 import json
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
+from auth.db import chat_history_col
+from auth.utils import decode_token
+from bson import ObjectId
+from datetime import datetime, timezone
 
 from schemes.rag_engine import ask
 from schemes.static_kb  import SCHEMES_KB
@@ -47,7 +51,7 @@ class SchemeAskRequest(BaseModel):
 # POST /schemes/ask
 # =============================================================================
 @router.post("/ask")
-async def schemes_ask(req: SchemeAskRequest):
+async def schemes_ask(req: SchemeAskRequest, authorization: str = Header(default="")):
     """
     LangChain RetrievalQA — Government Schemes Q&A.
     Supports English, Hindi and Telugu. State-specific for Telangana & AP.
@@ -59,6 +63,21 @@ async def schemes_ask(req: SchemeAskRequest):
             state    = (req.state or "").strip(),
             language = req.language or "en",
         )
+
+        user_id = None
+        if authorization and authorization.startswith("Bearer "):
+            user_id = decode_token(authorization.split(" ", 1)[1])
+        if user_id:
+            try:
+                chat_history_col().insert_one({
+                    "user_id": ObjectId(user_id),
+                    "agent": "scheme",
+                    "query": req.question.strip(),
+                    "created_at": datetime.now(timezone.utc)
+                })
+            except Exception:
+                pass
+
         return result
     except json.JSONDecodeError:
         raise HTTPException(

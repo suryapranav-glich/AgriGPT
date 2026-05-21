@@ -1,5 +1,5 @@
 # =============================================================================
-# AgriGPT — FastAPI Server  (updated: Feature 3 Fertilizer added)
+# AgriGPT — FastAPI Server  (updated: Auth + MongoDB + Dashboard added)
 # Run: python app.py
 # =============================================================================
 
@@ -15,6 +15,16 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import uvicorn
+from fastapi import Header
+
+from auth.db import chat_history_col, disease_diagnoses_col
+from auth.utils import decode_token
+from bson import ObjectId
+from datetime import datetime, timezone
+
+# ── Auth & Dashboard routers ──────────────────────────────────────────────────
+from auth.router import router as auth_router
+from dashboard.router import router as dashboard_router
 
 # ── Resolve paths ─────────────────────────────────────────────────────────────
 BASE_DIR     = os.path.join(os.path.dirname(__file__), "saved_models")
@@ -38,6 +48,9 @@ from irrigation.router import router as irrigation_router
 # ── Feature 7: Crop Price Prediction & Market Advisor ────────────────────────
 from market import load_market_graph
 from market import router as market_router
+
+# ── Feature 8: Voice Assistant ───────────────────────────────────────────────
+from routes.voice_routes import router as voice_router
 
 # ── Disease knowledge base (unchanged) ───────────────────────────────────────
 DISEASE_INFO = {
@@ -180,6 +193,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Include Auth & Dashboard routers ─────────────────────────────────────────
+app.include_router(auth_router)
+app.include_router(dashboard_router)
+
 # ── Include Feature 3 router ──────────────────────────────────────────────────
 app.include_router(fertilizer_router)
 
@@ -191,6 +208,7 @@ app.include_router(irrigation_router)
 
 # ── Include Feature 7 router ──────────────────────────────────────────────────
 app.include_router(market_router)
+app.include_router(voice_router)
 
 
 # =============================================================================
@@ -251,7 +269,7 @@ def health():
 
 
 @app.post("/diagnose")
-async def diagnose(file: UploadFile = File(...)):
+async def diagnose(file: UploadFile = File(...), authorization: str = Header(default="")):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image (JPG or PNG)")
 
@@ -278,7 +296,7 @@ async def diagnose(file: UploadFile = File(...)):
 
     info = get_disease_info(top_class)
 
-    return {
+    response_data = {
         "status"             : "success",
         "plant"              : plant_name,
         "disease"            : condition_name,
@@ -299,6 +317,31 @@ async def diagnose(file: UploadFile = File(...)):
         ],
     }
 
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        user_id = decode_token(authorization.split(" ", 1)[1])
+    
+    if user_id:
+        now = datetime.now(timezone.utc)
+        try:
+            disease_diagnoses_col().insert_one({
+                "user_id": ObjectId(user_id),
+                "timestamp": now.isoformat(),
+                "disease_detected": condition_name if top_confidence >= CONFIDENCE_THRESHOLD else "Unknown",
+                "severity": info.get("severity", "none"),
+                "confidence": float(top_confidence)
+            })
+            chat_history_col().insert_one({
+                "user_id": ObjectId(user_id),
+                "agent": "disease",
+                "query": f"Uploaded crop photo. Result: {condition_name}",
+                "created_at": now
+            })
+        except Exception:
+            pass
+
+    return response_data
+
 
 # =============================================================================
 # FEATURE 4 — SOIL HEALTH ANALYSIS (Gemini version)
@@ -316,7 +359,7 @@ class SoilAnalyseRequest(BaseModel):
 
 
 @app.post("/soil/analyse")
-async def soil_analyse(req: SoilAnalyseRequest):
+async def soil_analyse(req: SoilAnalyseRequest, authorization: str = Header(default="")):
     import json
     import asyncio
     from fastapi.responses import StreamingResponse
@@ -391,6 +434,21 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
         except Exception as e:
             print(f"[Soil Analyse] Gemini API call failed or key is invalid ({e}). Falling back to simulated streaming analysis.")
             use_fallback = True
+
+        # Log Activity after streaming starts
+        user_id = None
+        if authorization and authorization.startswith("Bearer "):
+            user_id = decode_token(authorization.split(" ", 1)[1])
+        if user_id:
+            try:
+                chat_history_col().insert_one({
+                    "user_id": ObjectId(user_id),
+                    "agent": "soil",
+                    "query": f"Analyzed soil (pH: {req.ph}, N: {req.n}, P: {req.p}, K: {req.k})",
+                    "created_at": datetime.now(timezone.utc)
+                })
+            except Exception:
+                pass
             
         if use_fallback:
             # Evaluated statuses

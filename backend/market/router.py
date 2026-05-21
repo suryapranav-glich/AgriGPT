@@ -16,8 +16,10 @@ from typing import Any, AsyncIterator, Literal, Optional, TypedDict
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Header
 from fastapi.responses import StreamingResponse
+from auth.utils import decode_token
+from bson import ObjectId
 
 load_dotenv()
 
@@ -747,6 +749,7 @@ async def market_prices(
     crop:       str = Query("Tomato"),
     district:   str = Query("Hyderabad"),
     range_days: int = Query(30, alias="range"),
+    authorization: str = Header(default="")
 ):
     """
     Main data endpoint — returns history, forecast, recommendation, nearby markets.
@@ -778,16 +781,34 @@ async def market_prices(
     # 6. Save to MongoDB farm memory (blueprint: per-user crop history)
     mongo = get_mongo()
     if mongo:
+        user_id = None
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization.split(" ", 1)[1]
+            user_id = decode_token(token)
+
         try:
             db  = mongo["agrigpt"]
             col = db["market_queries"]
-            await col.insert_one({
+            doc = {
                 "crop":      crop,
                 "district":  district,
                 "price":     current,
                 "action":    rec["action"],
                 "timestamp": date.today().isoformat(),
-            })
+            }
+            if user_id:
+                doc["user_id"] = ObjectId(user_id)
+            await col.insert_one(doc)
+
+            if user_id:
+                from auth.db import chat_history_col
+                from datetime import datetime, timezone
+                chat_history_col().insert_one({
+                    "user_id": ObjectId(user_id),
+                    "agent": "market",
+                    "query": f"Checked prices for {crop} in {district}",
+                    "created_at": datetime.now(timezone.utc)
+                })
         except Exception:
             pass
 

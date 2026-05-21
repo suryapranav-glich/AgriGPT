@@ -47,7 +47,10 @@ function Irrigation() {
       const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
       const res = await fetch(`${api_url}/irrigation/plan`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("agrigpt_token")}`
+        },
         body: JSON.stringify({
           location: locInput,
           crop: cropInput,

@@ -146,7 +146,10 @@ function Schemes() {
 
     fetch(`${BACKEND}/schemes/ask`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("agrigpt_token")}`
+      },
       body: JSON.stringify({ question: debouncedQ, state, language }),
       signal: abortRef.current.signal,
     })

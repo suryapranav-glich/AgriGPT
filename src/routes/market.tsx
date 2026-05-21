@@ -78,6 +78,7 @@ interface MarketData {
 function Market() {
   const { t, lang } = useTranslation();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFetchRef = useRef<string>("");
 
   // Filter States
   const [selectedCrop, setSelectedCrop] = useState("Tomato");
@@ -164,12 +165,19 @@ function Market() {
 
   // Fetch Main Market Data
   const fetchData = async (isManualRefresh = false) => {
+    const queryKey = `${selectedCrop}-${selectedDistrict}-${range}-${lang}`;
+    if (!isManualRefresh && lastFetchRef.current === queryKey) return;
+    lastFetchRef.current = queryKey;
+
     setLoading(true);
     setError(null);
     const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
     try {
       const res = await fetch(
-        `${api_url}/api/market/prices?crop=${encodeURIComponent(selectedCrop)}&district=${encodeURIComponent(selectedDistrict)}&range=${range}`
+        `${api_url}/api/market/prices?crop=${encodeURIComponent(selectedCrop)}&district=${encodeURIComponent(selectedDistrict)}&range=${range}`,
+        {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("agrigpt_token")}` }
+        }
       );
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const json: MarketData = await res.json();

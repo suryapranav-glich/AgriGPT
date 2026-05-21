@@ -34,7 +34,10 @@ function Fertilizer() {
       const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
       const res = await fetch(`${api_url}/fertilizer/recommend`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("agrigpt_token")}`
+        },
         body: JSON.stringify({
           crop: crop.trim(),
           soil_type: soilType.trim(),

@@ -12,9 +12,14 @@
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
 from typing import Optional
+
+from auth.db import chat_history_col
+from auth.utils import decode_token
+from bson import ObjectId
+from datetime import datetime, timezone
 
 from fertilizer.rag_engine import recommend
 
@@ -65,7 +70,7 @@ class FertilizerRequest(BaseModel):
 # ENDPOINT
 # =============================================================================
 @router.post("/recommend")
-async def fertilizer_recommend(req: FertilizerRequest):
+async def fertilizer_recommend(req: FertilizerRequest, authorization: str = Header(default="")):
     """
     Returns a full fertilizer recommendation including:
     - NPK summary (kg/acre)
@@ -94,6 +99,20 @@ async def fertilizer_recommend(req: FertilizerRequest):
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Recommendation error: {e}")
+
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        user_id = decode_token(authorization.split(" ", 1)[1])
+    if user_id:
+        try:
+            chat_history_col().insert_one({
+                "user_id": ObjectId(user_id),
+                "agent": "fertilizer",
+                "query": f"Fertilizer recommendation for {req.crop} ({req.soil_type})",
+                "created_at": datetime.now(timezone.utc)
+            })
+        except Exception:
+            pass
 
     return {"status": "success", **result}
 

@@ -2,8 +2,8 @@
 # Install with: pip install -r requirements.txt
 
 # ─── Deep Learning ───────────────────────────────────────
-torch==2.3.1
-torchvision==0.18.1
+torch>=2.9.0
+torchvision>=0.20.0
 # For CUDA 12.1 (recommended if you have NVIDIA GPU):
 # pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu121
 
@@ -32,3 +32,14 @@ langchain-community
 langchain-google-genai
 chromadb
 
+# ─── Auth & Database ──────────────────────────────────────
+pymongo>=4.6.0
+bcrypt>=4.0.0
+python-jose[cryptography]>=3.3.0
+
+# Feature 8: Voice Assistant
+gtts>=2.5.1
+python-multipart>=0.0.9
+google-auth>=2.29.0
+requests>=2.31.0
+pydantic[email]>=2.0.0

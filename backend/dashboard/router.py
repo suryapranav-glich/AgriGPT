@@ -1,0 +1,194 @@
+# =============================================================================
+# backend/dashboard/router.py — Dashboard metrics endpoint
+#
+# Routes:
+#   GET  /dashboard/metrics       → per-user dashboard data from MongoDB
+#   PATCH /dashboard/metrics      → update user's crop/mandi/irrigation data
+#   POST /dashboard/activity      → log a new activity event for the user
+# =============================================================================
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
+
+from auth.db import (
+    users_col,
+    farm_profiles_col,
+    chat_history_col,
+    disease_diagnoses_col,
+    irrigation_logs_col,
+    market_queries_col,
+    voice_queries_col,
+)
+from auth.utils import decode_token
+
+router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+# ── Helper ────────────────────────────────────────────────────────────────────
+def _require_user_id(authorization: str) -> ObjectId:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization.split(" ", 1)[1]
+    uid = decode_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return ObjectId(uid)
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+class MetricsUpdate(BaseModel):
+    active_crop: Optional[str] = None
+    last_diagnosis: Optional[str] = None
+    last_diagnosis_severity: Optional[str] = None
+    next_irrigation: Optional[str] = None
+    mandi_price: Optional[float] = None
+    mandi_price_change: Optional[float] = None
+    mandi_location: Optional[str] = None
+
+
+class ActivityEvent(BaseModel):
+    agent: str       # "disease" | "market" | "weather" | "scheme" | "soil" | "fertilizer"
+    query: str       # Short description of what was asked/done
+    status: str      # "resolved" | "answered" | "pending"
+
+
+# =============================================================================
+# GET /dashboard/metrics
+# =============================================================================
+@router.get("/metrics")
+def get_metrics(authorization: str = Header(default="")):
+    uid = _require_user_id(authorization)
+    doc = users_col().find_one({"_id": uid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    farm = farm_profiles_col().find_one({"user_id": uid}) or {}
+
+    # 1. Active Crop & Market Price (pull latest market query)
+    latest_market = market_queries_col().find_one({"user_id": uid}, sort=[("timestamp", -1)])
+    if latest_market:
+        active_crop = latest_market.get("crop", farm.get("active_crop"))
+        mandi_price = latest_market.get("price", farm.get("mandi_price"))
+        mandi_location = latest_market.get("district", farm.get("mandi_location", "Local Market"))
+    else:
+        active_crop = farm.get("active_crop")
+        mandi_price = farm.get("mandi_price")
+        mandi_location = farm.get("mandi_location", "Local Market")
+
+    # 2. Disease Diagnosis (pull latest diagnosis)
+    latest_disease = disease_diagnoses_col().find_one({"user_id": uid}, sort=[("updated_at", -1)])
+    if latest_disease:
+        last_diagnosis = latest_disease.get("disease_detected", farm.get("last_diagnosis"))
+        last_diagnosis_severity = latest_disease.get("severity", farm.get("last_diagnosis_severity", "none"))
+    else:
+        last_diagnosis = farm.get("last_diagnosis")
+        last_diagnosis_severity = farm.get("last_diagnosis_severity", "none")
+
+    # 3. Irrigation
+    latest_irrigation = irrigation_logs_col().find_one({"user_id": uid}, sort=[("timestamp", -1)])
+    if latest_irrigation:
+        next_irrigation = latest_irrigation.get("next_schedule", farm.get("next_irrigation"))
+    else:
+        next_irrigation = farm.get("next_irrigation")
+
+    # 4. Fetch recent activity (combine text chat and voice queries)
+    raw_chat = list(chat_history_col().find({"user_id": uid}).sort("created_at", -1).limit(5))
+    raw_voice = list(voice_queries_col().find({"user_id": uid}).sort("timestamp", -1).limit(5))
+
+    combined_activity = []
+    for c in raw_chat:
+        dt = c.get("created_at")
+        combined_activity.append({
+            "agent":  c.get("agent", "general"),
+            "query":  c.get("query", ""),
+            "status": "answered",
+            "time_dt": dt,
+            "time":   _relative_time(dt),
+        })
+    for v in raw_voice:
+        ts_str = v.get("timestamp", "")
+        dt = None
+        if ts_str:
+            try:
+                # Handle ISO string from frontend/voice_routes
+                dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except ValueError:
+                dt = datetime.now(timezone.utc)
+        combined_activity.append({
+            "agent":  v.get("agent_type", "market"),
+            "query":  v.get("transcript", ""),
+            "status": "answered",
+            "time_dt": dt,
+            "time":   _relative_time(dt),
+        })
+
+    # Sort combined by time descending
+    combined_activity.sort(key=lambda x: x["time_dt"] if x["time_dt"] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    activity = [{"agent": x["agent"], "query": x["query"], "status": x["status"], "time": x["time"]} for x in combined_activity[:5]]
+
+    return {
+        "active_crop":              active_crop,
+        "last_diagnosis":           last_diagnosis,
+        "last_diagnosis_severity":  last_diagnosis_severity,
+        "next_irrigation":          next_irrigation,
+        "mandi_price":              mandi_price,
+        "mandi_price_change":       farm.get("mandi_price_change", 0.0), # Too complex to calc diff here without full history
+        "mandi_location":           mandi_location,
+        "location":                 farm.get("state", "India"),
+        "name":                     doc.get("name", "Farmer"),
+        "recent_activity":          activity,
+    }
+
+
+# =============================================================================
+# PATCH /dashboard/metrics  — update user's crop/farm data
+# =============================================================================
+@router.patch("/metrics")
+def update_metrics(body: MetricsUpdate, authorization: str = Header(default="")):
+    uid = _require_user_id(authorization)
+    update_fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+    farm_profiles_col().update_one({"user_id": uid}, {"$set": update_fields}, upsert=True)
+    return {"message": "Dashboard metrics updated"}
+
+
+# =============================================================================
+# POST /dashboard/activity  — log a feature usage event
+# =============================================================================
+@router.post("/activity")
+def log_activity(body: ActivityEvent, authorization: str = Header(default="")):
+    uid = _require_user_id(authorization)
+    doc = {
+        "user_id":    uid,
+        "agent":      body.agent,
+        "query":      body.query,
+        "query_language": "en",
+        "response":   "...", # Mock response for now
+        "sources":    [],
+        "created_at": datetime.now(timezone.utc),
+    }
+    chat_history_col().insert_one(doc)
+    return {"message": "Activity logged"}
+
+
+# ── Utility ───────────────────────────────────────────────────────────────────
+def _relative_time(dt: Optional[datetime]) -> str:
+    if not dt:
+        return "Recently"
+    now = datetime.now(timezone.utc)
+    diff = now - dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else now - dt
+    seconds = diff.total_seconds()
+    if seconds < 3600:
+        m = int(seconds // 60) or 1
+        return f"{m}m ago"
+    if seconds < 86400:
+        h = int(seconds // 3600)
+        return f"{h}h ago"
+    d = int(seconds // 86400)
+    return f"{d}d ago"

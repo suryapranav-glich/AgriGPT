@@ -46,13 +46,14 @@ export function Label({ children }: { children: ReactNode }) {
 
 // ── SeverityBadge ─────────────────────────────────────────────────────────────
 const severityMap = {
-  low: { label: "Low", bg: "#fef3c7", color: "#92400e" },
-  med: { label: "Medium", bg: "#fee2e2", color: "#991b1b" },
-  high: { label: "High", bg: "#fecaca", color: "#7f1d1d" },
+  low:  { label: "Low",    bg: "#fef3c7", color: "#92400e" },
+  med:  { label: "Medium", bg: "#fee2e2", color: "#991b1b" },
+  high: { label: "High",  bg: "#fecaca", color: "#7f1d1d" },
+  none: { label: "Healthy", bg: "#f0f5ea", color: "#3b6d11" },
 };
 
-export function SeverityBadge({ level }: { level: "low" | "med" | "high" }) {
-  const s = severityMap[level];
+export function SeverityBadge({ level }: { level: "low" | "med" | "high" | "none" }) {
+  const s = severityMap[level] ?? severityMap["none"];
   return (
     <span
       style={{
