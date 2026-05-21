@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type { ReactNode, CSSProperties, InputHTMLAttributes, SelectHTMLAttributes } from "react";
 
 // ── Card ─────────────────────────────────────────────────────────────────────
@@ -99,12 +100,16 @@ export function Button({
   type = "button",
   onClick,
   variant = "primary",
+  disabled = false,
+  style: styleProp,
 }: {
   children: ReactNode;
   className?: string;
   type?: "button" | "submit" | "reset";
   onClick?: () => void;
   variant?: "primary" | "secondary";
+  disabled?: boolean;
+  style?: CSSProperties;
 }) {
   const isPrimary = variant === "primary";
   return (
@@ -112,6 +117,7 @@ export function Button({
       type={type}
       onClick={onClick}
       className={className}
+      disabled={disabled}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -120,14 +126,16 @@ export function Button({
         borderRadius: 8,
         fontSize: 14,
         fontWeight: 500,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         border: isPrimary ? "none" : "1px solid var(--c-border)",
         background: isPrimary ? "#3b6d11" : "var(--c-bg)",
         color: isPrimary ? "#fff" : "var(--c-ink)",
+        opacity: disabled ? 0.55 : 1,
         transition: "opacity 0.15s",
+        ...styleProp,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.opacity = "0.88"; }}
+      onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.opacity = "1"; }}
     >
       {children}
     </button>
@@ -135,13 +143,13 @@ export function Button({
 }
 
 // ── Input ─────────────────────────────────────────────────────────────────────
-export function Input({
-  className = "",
-  style,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement> & { className?: string }) {
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { className?: string }
+>(function Input({ className = "", style, ...props }, ref) {
   return (
     <input
+      ref={ref}
       className={className}
       {...props}
       style={{
@@ -160,7 +168,7 @@ export function Input({
       onBlur={(e) => { e.currentTarget.style.borderColor = "var(--c-border)"; }}
     />
   );
-}
+});
 
 // ── Select ─────────────────────────────────────────────────────────────────────
 export function Select({

@@ -28,6 +28,10 @@ from inference import load_model, predict_from_pil
 from fertilizer.rag_engine import load_rag_engine
 from fertilizer.router import router as fertilizer_router
 
+# ── Feature 6: Government Schemes Q&A ────────────────────────────────────────
+from schemes.rag_engine import load_schemes_engine
+from schemes.router import router as schemes_router
+
 # ── Disease knowledge base (unchanged) ───────────────────────────────────────
 DISEASE_INFO = {
     "Tomato___Early_blight": {
@@ -172,6 +176,9 @@ app.add_middleware(
 # ── Include Feature 3 router ──────────────────────────────────────────────────
 app.include_router(fertilizer_router)
 
+# ── Include Feature 6 router ──────────────────────────────────────────────────
+app.include_router(schemes_router)
+
 
 # =============================================================================
 # STARTUP — load models
@@ -195,6 +202,14 @@ async def startup_event():
         print("[AgriGPT] Fertilizer RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Fertilizer RAG skipped: {e}")
+
+    # Feature 6: Government Schemes Q&A
+    print("[AgriGPT] Loading government schemes RAG engine…")
+    try:
+        load_schemes_engine()
+        print("[AgriGPT] Government schemes RAG engine ready.")
+    except EnvironmentError as e:
+        print(f"[AgriGPT] [WARNING] Government schemes RAG skipped: {e}")
 
 
 _model       = None

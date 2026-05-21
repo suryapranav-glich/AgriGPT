@@ -1,4 +1,4 @@
-export type LangCode = "en" | "te" | "hi";
+﻿export type LangCode = "en" | "te" | "hi";
 
 export const LANGUAGES: { code: LangCode; name: string; native: string; flag: string }[] = [
   { code: "en", name: "English", native: "English", flag: "🇬🇧" },
@@ -205,7 +205,13 @@ const en: Dict = {
   tenMinAgo: "10 min ago",
   oneHourAgo: "1h ago",
   threeHoursAgo: "3h ago",
-  voiceResponseText: "Today's tomato price in Kolar mandi is ₹2,340 per quintal — up 4.2% from yesterday. Conditions are favourable to sell this week.",
+  voiceResponseText: "Today's tomato price in Kolar mandi is \u20b92,340 per quintal \u2014 up 4.2% from yesterday. Conditions are favourable to sell this week.",
+
+  // Shared UI
+  learnMore: "Learn More",
+  couldNotFetch: "Could not fetch answer. Make sure the backend is running.",
+  quotaExceeded: "AI quota reached for today (free tier: 20 req/day). Please try again tomorrow.",
+  quotaRetry: "AI quota reached. Please retry in {s} seconds.",
 };
 
 const te: Dict = {
@@ -244,7 +250,7 @@ const te: Dict = {
   uploadPhotoToSee: "రోగ నిర్ధారణను చూడటానికి ఫోటోను అప్‌లోడ్ చేయండి.",
   analysingLeaf: "మీ ఆకును విశ్లేషిస్తున్నాము...",
   likelyCause: "సాధ్యమైన కారణం",
-  organicTreatment: "సేంద్రీय చికిత్స",
+  organicTreatment: "సేంద్రీయ చికిత్స",
   chemicalTreatment: "రసాయన చికిత్స",
   preventionTips: "నివారణ చిట్కాలు",
   leafBlight: "ఆకు మాడు తెగులు",
@@ -393,6 +399,12 @@ const te: Dict = {
   oneHourAgo: "1 గంట క్రితం",
   threeHoursAgo: "3 గంటల క్రితం",
   voiceResponseText: "ఈ రోజు కోలార్ మండిలో టమోటా ధర క్వింటాలుకు ₹2,340 — నిన్నటి కంటే 4.2% పెరిగింది. ఈ వారం విక్రయించడానికి పరిస్థితులు అనుకూలంగా ఉన్నాయి.",
+
+  // Shared UI
+  learnMore: "విశేషాలు తెలుసుకోండి",
+  couldNotFetch: "సమాధానం తెచ్చుకొనలేకపోయాం. బ్యాకెండ్ నడుస్తున్నదా అని నిర్ధారించండి.",
+  quotaExceeded: "నేటి AI కోటా అయిపోయింది (ఉచిత స్థాయి: రోజుకు 20 అభ్యర్థనలు). దయచేసి రేపు మళ్ళీ ప్రయత్నించండి.",
+  quotaRetry: "AI కోటా అయిపోయింది. {s} సెకన్ల తర్వాత మళ్ళీ ప్రయత్నించండి.",
 };
 
 const hi: Dict = {
@@ -466,7 +478,7 @@ const hi: Dict = {
   chatMsgQ1: "मेरे टमाटर के पत्तों पर पीले धब्बे हैं। यह क्या है?",
   chatMsgA1: "केंद्रीकृत छल्लों वाले पीले धब्बे आमतौर पर अगेती झुलसा (अल्टरनेरिया सोलानी) का संकेत देते हैं। पुष्टि के लिए एक स्पष्ट फोटो अपलोड करें, और मैनकोजेब 2 ग्राम/लीटर का उपयोग करने पर विचार करें।",
   chatMsgQ2: "आज कोलार में प्याज की कीमत क्या है?",
-  chatMsgA2: "आज की कोलार मंडी में प्याज की कीमत ₹1,820 प्रति क्विंटल है — कल से 3.1% अधिक। पिछले 7 दिनों में रुझान तेजी का है।",
+  chatMsgA2: "आज की कोलार मंडी में प्याज की कीमत ₹1,820 प्रति क्विंटल है — कल से 3.1% अधिक। पिछले 7 दिनों में रुझान तेजी का है.",
 
   // Irrigation Page
   applyChanges: "बदलाव लागू करें",
@@ -581,7 +593,13 @@ const hi: Dict = {
   tenMinAgo: "10 मिनट पहले",
   oneHourAgo: "1 घंटे पहले",
   threeHoursAgo: "3 घंटे पहले",
-  voiceResponseText: "आज कोलार मंडी में टमाटर की कीमत ₹2,340 प्रति क्विंटल है — कल से 4.2% अधिक। इस सप्ताह बेचना अनुकूल है।",
+  voiceResponseText: "आज कोलार मंडी में टमाटर की कीमत ₹2,340 प्रति क्विंटल है — कल से 4.2% अधिक. इस सप्ताह बेचना अनुकूल है।",
+
+  // Shared UI
+  learnMore: "और जानें",
+  couldNotFetch: "उत्तर नहीं मिला. कृपया बैकेंड सर्वर चला हुआ है यह सुनिश्चित करें।",
+  quotaExceeded: "आज की AI कोटा समाप्त हो गई (मुफ्त स्तर: 20 अनुरोध/दिन)। कृपया कल पुनः प्रयास करें।",
+  quotaRetry: "AI कोटा समाप्त। {s} सेकंड में पुनः प्रयास करें।",
 };
 
 export const translations: Record<LangCode, Dict> = {

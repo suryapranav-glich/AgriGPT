@@ -2,11 +2,11 @@ import { FileText, ExternalLink } from "lucide-react";
 import { useTranslation } from "../../contexts/LanguageContext";
 
 const categoryColors: Record<string, { bg: string; color: string }> = {
-  subsidies:  { bg: "#f0f5ea", color: "#3b6d11" },
-  insurance:  { bg: "#dbeafe", color: "#1e40af" },
-  credit:     { bg: "#ede9fe", color: "#5b21b6" },
+  subsidies:     { bg: "#f0f5ea", color: "#3b6d11" },
+  insurance:     { bg: "#dbeafe", color: "#1e40af" },
+  credit:        { bg: "#ede9fe", color: "#5b21b6" },
   irrigationTab: { bg: "#dcfce7", color: "#166534" },
-  seeds:      { bg: "#ffedd5", color: "#9a3412" },
+  seeds:         { bg: "#ffedd5", color: "#9a3412" },
 };
 
 export function SchemeCard({
@@ -14,11 +14,13 @@ export function SchemeCard({
   stateKey,
   categoryKey,
   summaryKey,
+  url,
 }: {
   nameKey: string;
   stateKey: string;
   categoryKey: string;
   summaryKey: string;
+  url?: string;
 }) {
   const { t } = useTranslation();
   const c = categoryColors[categoryKey] ?? { bg: "#f3f4f6", color: "#6b7280" };
@@ -35,6 +37,7 @@ export function SchemeCard({
         gap: 10,
       }}
     >
+      {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div
@@ -57,6 +60,8 @@ export function SchemeCard({
             <div style={{ fontSize: 12, color: "var(--c-muted)" }}>{t(stateKey)}</div>
           </div>
         </div>
+
+        {/* Category badge */}
         <span
           style={{
             fontSize: 11,
@@ -73,26 +78,44 @@ export function SchemeCard({
         </span>
       </div>
 
+      {/* Summary */}
       <p style={{ fontSize: 13, color: "var(--c-muted)", lineHeight: 1.55 }}>{t(summaryKey)}</p>
 
-      <button
-        style={{
-          alignSelf: "flex-start",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          fontSize: 12,
-          color: "#3b6d11",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          padding: 0,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
-      >
-        {t("learnMore")} <ExternalLink size={12} strokeWidth={1.75} />
-      </button>
+      {/* Learn More — real anchor when url is provided */}
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            alignSelf: "flex-start",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 12,
+            color: "#3b6d11",
+            textDecoration: "none",
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+        >
+          {t("learnMore")} <ExternalLink size={12} strokeWidth={1.75} />
+        </a>
+      ) : (
+        <span
+          style={{
+            alignSelf: "flex-start",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 12,
+            color: "#9ca3af",
+          }}
+        >
+          {t("learnMore")} <ExternalLink size={12} strokeWidth={1.75} />
+        </span>
+      )}
     </div>
   );
 }

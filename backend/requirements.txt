@@ -25,3 +25,10 @@ faiss-cpu
 sentence-transformers
 google-generativeai
 pypdf
+
+# ─── Feature 6: Schemes RAG (LangChain) ──────────────────
+langchain
+langchain-community
+langchain-google-genai
+chromadb
+
