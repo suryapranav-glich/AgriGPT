@@ -310,6 +310,7 @@ function ChatPage() {
           image_base64: imageBase64,
           file_base64: fileBase64,
           file_name: fileName,
+          override_lang: lang,
         }),
       });
 

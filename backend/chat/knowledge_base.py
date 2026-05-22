@@ -175,29 +175,54 @@ KNOWLEDGE_CHUNKS: list[dict] = [
     {
         "id": "market_001",
         "agent": "market",
-        "topic": "Minimum Support Price (MSP) and selling crops",
+        "topic": "Minimum Support Price (MSP) — all crops 2024-25",
         "content": (
-            "Minimum Support Price (MSP) is declared by Government of India for 23 crops every year. "
-            "Kharif 2024-25 MSP examples: Paddy (common grade) ₹2,300/quintal, Cotton (medium staple) ₹7,121/quintal, "
-            "Maize ₹2,225/quintal, Groundnut ₹6,783/quintal, Soybean ₹4,892/quintal. "
-            "Selling channels: Government procurement through FCI, MARKFED, and RBK (Rythu Bharosa Kendras) in Telangana. "
-            "eNAM (National Agriculture Market): Online platform for transparent market access — register at enam.gov.in. "
+            "Minimum Support Price (MSP) declared by Government of India for 2024-25:\n"
+            "\n--- KHARIF CROPS ---\n"
+            "Paddy (Common): ₹2,300/quintal | Paddy (Grade A): ₹2,320/quintal\n"
+            "Jowar (Hybrid): ₹3,371/quintal | Jowar (Maldandi): ₹3,421/quintal\n"
+            "Bajra: ₹2,625/quintal\n"
+            "Maize: ₹2,225/quintal\n"
+            "Ragi: ₹4,290/quintal\n"
+            "Tur (Arhar/Pigeon Pea): ₹7,550/quintal\n"
+            "Moong (Green Gram): ₹8,682/quintal\n"
+            "Urad (Black Gram): ₹7,400/quintal\n"
+            "Groundnut: ₹6,783/quintal\n"
+            "Sunflower Seed: ₹7,280/quintal\n"
+            "Soybean (Yellow): ₹4,892/quintal\n"
+            "Sesamum: ₹9,267/quintal\n"
+            "Nigerseed: ₹8,717/quintal\n"
+            "Cotton (Medium Staple): ₹7,121/quintal\n"
+            "Cotton (Long Staple): ₹7,521/quintal\n"
+            "\n--- RABI CROPS ---\n"
+            "Wheat: ₹2,275/quintal\n"
+            "Barley: ₹1,735/quintal\n"
+            "Gram (Chana): ₹5,440/quintal\n"
+            "Masur (Lentil): ₹6,425/quintal\n"
+            "Rapeseed/Mustard: ₹5,950/quintal\n"
+            "Safflower: ₹5,800/quintal\n"
+            "\nSelling channels: FCI, MARKFED, RBK (Rythu Bharosa Kendras) in Telangana. "
+            "eNAM (National Agriculture Market): Online transparent market — register at enam.gov.in. "
             "Rythu Bazars in Telangana: Sell directly to consumers without middlemen."
         ),
-        "source": "CACP MSP Notification 2024-25; Telangana Agriculture Department",
+        "source": "CACP MSP Notification 2024-25; Ministry of Agriculture; Telangana Agriculture Department",
     },
     {
         "id": "market_002",
         "agent": "market",
-        "topic": "PM-KISAN and farmer schemes",
+        "topic": "PM-KISAN and farmer welfare schemes",
         "content": (
-            "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi): ₹6,000/year in 3 instalments directly to farmer bank account. "
-            "Eligibility: All small and marginal farmers with cultivable land. Apply at pmkisan.gov.in or CSC centre. "
-            "Telangana Rythu Bandhu: ₹10,000/acre/year investment support (Rabi + Kharif combined). "
-            "Rythu Bima: Free crop insurance for farmers in Telangana — ₹5 lakh coverage. "
-            "Fasal Bima Yojana (PMFBY): Subsidised crop insurance — premium 2% for Kharif, 1.5% for Rabi food crops."
+            "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi): ₹6,000/year in 3 instalments of ₹2,000 directly to farmer bank account. "
+            "Eligibility: All small and marginal farmers with cultivable land. Apply at pmkisan.gov.in or nearest CSC centre. "
+            "\nTelangana Rythu Bandhu: ₹10,000/acre/year investment support (Rabi + Kharif combined, ₹5,000 per season). "
+            "Rythu Bima (Telangana): Free life insurance for farmers — ₹5 lakh coverage, premium paid by state government. "
+            "\nFasal Bima Yojana (PMFBY): Subsidised crop insurance. "
+            "Premium: 2% of sum insured for Kharif crops, 1.5% for Rabi food/oilseed crops, 5% for horticultural crops. "
+            "Coverage: Yield losses due to drought, flood, hailstorm, pest attack, post-harvest losses. "
+            "\nKisan Credit Card (KCC): Short-term credit at 4% interest (after 2% interest subvention + 3% prompt repayment incentive). "
+            "Credit limit: Based on landholding — typically ₹50,000–₹3,00,000."
         ),
-        "source": "Ministry of Agriculture PM-KISAN Portal; Telangana Agriculture Dept 2024",
+        "source": "Ministry of Agriculture PM-KISAN Portal; Telangana Agriculture Dept 2024; PMFBY Guidelines",
     },
 
     # ── PEST/DISEASE GENERAL ──────────────────────────────────────────────────
@@ -276,6 +301,205 @@ KNOWLEDGE_CHUNKS: list[dict] = [
             "Chlorothalonil 75 WP @ 300 g/acre at 45 DAS. Repeat every 10–12 days until harvest."
         ),
         "source": "ICAR Groundnut Production Guide 2023; ANGRAU AP Crop Manual",
+    },
+    {
+        "id": "rice_005",
+        "agent": "market",
+        "topic": "Paddy MSP price 2024-25",
+        "content": (
+            "Paddy Minimum Support Price (MSP) for Kharif 2024-25: "
+            "Common grade: ₹2,300 per quintal. Grade A: ₹2,320 per quintal. "
+            "Increase from 2023-24: ₹117/quintal (common grade). "
+            "Procurement: Through Food Corporation of India (FCI) and state agencies. "
+            "In Telangana: procured via RBK (Rythu Bharosa Kendras). "
+            "Farmer must bring proof of land record (pattadar passbook) and Aadhaar. "
+            "Direct payment: transferred to bank account within 48 hours of procurement."
+        ),
+        "source": "CACP MSP Notification Kharif 2024-25; FCI Procurement Guidelines",
+    },
+    {
+        "id": "cotton_004",
+        "agent": "market",
+        "topic": "Cotton MSP price 2024-25",
+        "content": (
+            "Cotton Minimum Support Price (MSP) Kharif 2024-25: "
+            "Medium Staple: ₹7,121 per quintal. Long Staple: ₹7,521 per quintal. "
+            "Increase from 2023-24: ₹501/quintal (medium staple). "
+            "Procurement agency: Cotton Corporation of India (CCI). "
+            "Sale point: Designated cotton mandis and CCI procurement centres. "
+            "Average market price in Warangal/Nalgonda mandis (2024 season): ₹6,800–₹7,400/quintal. "
+            "Tip: Harvest when 60–70% bolls open for best fibre quality and higher price."
+        ),
+        "source": "CACP MSP Notification Kharif 2024-25; CCI Cotton Procurement",
+    },
+    {
+        "id": "market_003",
+        "agent": "market",
+        "topic": "Vegetable and horticulture crop market prices",
+        "content": (
+            "Indicative wholesale mandi prices in Telangana/AP (2024 season, subject to variation):\n"
+            "Tomato: ₹500–₹2,500/quintal (highly variable — peaks Nov–Jan)\n"
+            "Onion: ₹800–₹2,000/quintal\n"
+            "Chilli (dry, Teja variety): ₹8,000–₹18,000/quintal (Guntur mandi)\n"
+            "Chilli (fresh green): ₹1,500–₹4,000/quintal\n"
+            "Potato: ₹600–₹1,200/quintal\n"
+            "Brinjal: ₹400–₹1,000/quintal\n"
+            "Bitter Gourd: ₹800–₹1,600/quintal\n"
+            "Cabbage: ₹300–₹700/quintal\n"
+            "Cauliflower: ₹500–₹1,200/quintal\n"
+            "Banana (local, per dozen): ₹20–₹50\n"
+            "Mango (Banginapalli/Alphonso): ₹2,000–₹5,000/quintal\n"
+            "Note: Prices fluctuate with season, surplus, and transport. "
+            "Check current rates at agmarknet.gov.in or APMC mandi boards."
+        ),
+        "source": "AgMarkNet Portal 2024; Telangana State Agriculture Marketing Dept",
+    },
+    {
+        "id": "market_004",
+        "agent": "market",
+        "topic": "Input costs — seeds, fertilizers, pesticides",
+        "content": (
+            "Indicative input costs for farmers in Telangana/AP (2024):\n"
+            "\n--- SEEDS (per acre) ---\n"
+            "Bt Cotton hybrid seed (450 g packet): ₹750–₹950/packet (need 2 packets/acre)\n"
+            "Paddy certified seed (BPT-5204): ₹35–₹45/kg\n"
+            "Groundnut seed: ₹60–₹80/kg\n"
+            "Soybean certified seed: ₹50–₹65/kg\n"
+            "Chilli hybrid seed: ₹800–₹2,500/10 g packet\n"
+            "\n--- FERTILIZERS (per bag/unit) ---\n"
+            "Urea (45 kg bag): ₹266.50 (subsidised MRP fixed by Govt)\n"
+            "DAP (50 kg bag): ₹1,350 (subsidised MRP)\n"
+            "MOP/Muriate of Potash (50 kg bag): ₹1,700 (approx)\n"
+            "NPK 19:19:19 (25 kg): ₹850–₹950\n"
+            "ZnSO4 (25 kg): ₹700–₹900\n"
+            "\n--- PESTICIDES (common) ---\n"
+            "Chlorpyriphos 20 EC (1 litre): ₹350–₹450\n"
+            "Profenophos 50 EC (500 ml): ₹300–₹400\n"
+            "Tricyclazole 75 WP (100 g): ₹200–₹280\n"
+            "Imidacloprid 17.8 SL (250 ml): ₹250–₹350\n"
+            "\nSubsidy: Fertilizer subsidy is direct to company (not farmer), keeping MRP low. "
+            "Seeds: State government provides subsidised certified seeds through TSSDC/APSSDC centres."
+        ),
+        "source": "Department of Fertilizers Govt of India 2024; Telangana State Seeds Dev Corp 2024",
+    },
+    {
+        "id": "hort_002",
+        "agent": "market",
+        "topic": "Chilli market prices and export",
+        "content": (
+            "Chilli market prices at Guntur Mirchi Yard (2024 season):\n"
+            "Teja (S-17) dry red chilli: ₹12,000–₹18,000/quintal\n"
+            "334 variety dry chilli: ₹8,000–₹12,000/quintal\n"
+            "G-5 (Kaddi): ₹6,000–₹9,000/quintal\n"
+            "Export: India exports 250,000+ tonnes chilli/year. Major buyers: China, Bangladesh, Sri Lanka, USA. "
+            "APEDA (Agricultural and Processed Food Products Export Development Authority) facilitates export certification. "
+            "For export quality: moisture < 11%, no banned pesticide residues (test at accredited labs). "
+            "Cold storage facility available at Guntur Yard — cost ₹18–₹22/quintal/month."
+        ),
+        "source": "Guntur Mirchi Yard APMC 2024; APEDA Export Data 2024",
+    },
+    {
+        "id": "gnut_002",
+        "agent": "market",
+        "topic": "Groundnut market prices 2024-25",
+        "content": (
+            "Groundnut MSP 2024-25: ₹6,783/quintal (with shell). "
+            "Market prices at major AP/Telangana mandis (2024):\n"
+            "Groundnut pods (bold): ₹5,500–₹7,200/quintal\n"
+            "Groundnut oil (mill gate price): ₹130–₹155/litre\n"
+            "De-oiled cake: ₹25,000–₹28,000/tonne (used as animal feed)\n"
+            "Oil content: ICGS-44 and Kadiri-6 give 47–50% oil content. "
+            "Processing: Nearest oil mills in Nellore, Kurnool, and Guntur districts. "
+            "Storage: Store pods at < 9% moisture to avoid Aflatoxin contamination. "
+            "Quality tip: Grade A groundnuts (bold, uniform) fetch ₹500–₹800 premium per quintal."
+        ),
+        "source": "CACP MSP 2024-25; Kurnool APMC 2024; ICAR Post-Harvest Manual",
+    },
+    {
+        "id": "maize_001",
+        "agent": "general",
+        "topic": "Maize cultivation",
+        "content": (
+            "Maize (corn) grows in both Kharif (June–Oct) and Rabi (Nov–Feb) seasons in Telangana/AP. "
+            "Recommended hybrid varieties: DHM-117, NK-6240, Bio-9681, DKC-9144. "
+            "Seed rate: 8–10 kg/acre (hybrid). Spacing: 60×20 cm or 75×20 cm. "
+            "Fertilizer (per acre): N 60 kg, P 30 kg, K 30 kg. "
+            "Split nitrogen: 1/3 basal, 1/3 at knee-high stage (30 DAS), 1/3 at tasseling. "
+            "Fall Armyworm (FAW) — Spodoptera frugiperda: Spray Emamectin Benzoate 5 SG @ 4 g/10 litres "
+            "or Chlorantraniliprole 18.5 SC @ 3 ml/10 litres at early infestation. "
+            "Water requirement: 450–600 mm; critical stages: knee-high, tasseling, silking, grain fill."
+        ),
+        "source": "ICAR Maize Production Guide 2023; PJTSAU Maize Handbook",
+    },
+    {
+        "id": "maize_002",
+        "agent": "market",
+        "topic": "Maize MSP and market prices",
+        "content": (
+            "Maize MSP 2024-25: ₹2,225/quintal. "
+            "Market prices at Nizamabad and Karimnagar mandis (2024 Kharif):\n"
+            "Maize (dry, < 14% moisture): ₹1,900–₹2,350/quintal\n"
+            "Wet maize (> 18% moisture): ₹1,400–₹1,700/quintal (significant discount)\n"
+            "Tip: Dry maize to < 14% moisture before selling — adds ₹300–₹500/quintal premium. "
+            "Buyers: Poultry feed mills (largest buyer), starch industry, distilleries. "
+            "Major maize markets in Telangana: Nizamabad, Adilabad, Karimnagar APMC yards."
+        ),
+        "source": "CACP MSP 2024-25; Nizamabad APMC 2024",
+    },
+    {
+        "id": "soy_001",
+        "agent": "general",
+        "topic": "Soybean cultivation",
+        "content": (
+            "Soybean is a major Kharif oilseed-cum-pulse crop. "
+            "Recommended varieties: JS-335, JS-9305, MACS-450, NRC-37. "
+            "Seed rate: 30–35 kg/acre. Spacing: 45×5 cm. Sowing depth: 3–4 cm. "
+            "Seed treatment: Rhizobium culture + PSB inoculant before sowing — saves 25 kg urea/acre. "
+            "Fertilizer: No nitrogen needed if Rhizobium inoculated; apply P 30 kg + K 20 kg/acre. "
+            "Pod borer: Spray Indoxacarb 14.5 SC @ 10 ml/10 litres. "
+            "Harvest when 95% pods turn brown (95–100 DAS). Threshing delay causes shattering."
+        ),
+        "source": "ICAR Soybean Production Manual 2023",
+    },
+    {
+        "id": "soy_002",
+        "agent": "market",
+        "topic": "Soybean MSP and market prices",
+        "content": (
+            "Soybean MSP 2024-25: ₹4,892/quintal (yellow variety). "
+            "Market prices at Latur (Maharashtra) and Nanded mandis (2024 Kharif): ₹4,400–₹5,100/quintal. "
+            "Soybean oil price (retail): ₹105–₹120/litre. "
+            "Soybean meal/cake: ₹35,000–₹42,000/tonne (high-value protein feed for poultry). "
+            "Processing: De-hulling, solvent extraction for oil; residual is protein-rich meal. "
+            "Export: Soybean meal is a major export commodity — APEDA certified labs needed for phytosanitary certificate."
+        ),
+        "source": "CACP MSP 2024-25; Latur APMC 2024; SOPA (Soybean Processors Association)",
+    },
+    {
+        "id": "scheme_001",
+        "agent": "market",
+        "topic": "Soil Health Card and free soil testing",
+        "content": (
+            "Soil Health Card Scheme (Government of India): Free soil testing for all farmers every 2 years. "
+            "Test includes: N, P, K, pH, EC, organic carbon, and 8 micronutrients. "
+            "How to apply: Visit nearest Krishi Vigyan Kendra, or soil testing lab at Agriculture Department. "
+            "Result: Customised fertilizer recommendation card for your specific plot. "
+            "Savings: Following Soil Health Card reduces fertilizer cost by ₹1,500–₹2,500/acre by avoiding excess use. "
+            "Online: Soil health data at soilhealth.dac.gov.in"
+        ),
+        "source": "Department of Agriculture, Cooperation and Farmers Welfare 2024",
+    },
+    {
+        "id": "scheme_002",
+        "agent": "market",
+        "topic": "eNAM and digital marketing for farmers",
+        "content": (
+            "eNAM (National Agriculture Market): Online platform connecting farmers to buyers across India. "
+            "Registration: Free — at enam.gov.in or nearest APMC yard. Required: Aadhaar, bank account, land record. "
+            "How it works: Upload produce quality details, assay result, and buyers bid online. "
+            "Benefits: Transparent price discovery, direct payment, and wider buyer base."
+        ),
+        "source": "Ministry of Agriculture eNAM Guidelines 2024",
     },
 ]
 

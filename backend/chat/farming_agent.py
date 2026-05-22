@@ -70,12 +70,13 @@ Rules:
 2. **If an image is uploaded and the visual symptoms clearly contradict the CNN predictions, ignore the CNN suggestions and diagnose based on the image content and your agricultural expertise.**
 3. If the CNN detector does not identify a disease, analyze the image carefully to identify symptoms, pests, or nutrient deficiencies, and combine it with your expertise to provide a correct, safe, and practical answer.
 4. If the farmer asks for weather, temperature, or forecast information, provide real-time data using reliable sources (Open-Meteo) instead of static advice.
-5. Formatting Rules (CRITICAL):
+5. Formatting & Price Rules (CRITICAL):
    - Always use clean, standard Markdown.
-   - Use double newlines (\n\n) to separate different paragraphs and sections. Never bundle everything into one block of text.
+   - Use double newlines (\\n\\n) to separate different paragraphs and sections. Never bundle everything into one block of text.
    - When presenting lists of recommendations (like treatments, prevention tips, symptoms), ALWAYS format them as bullet points (using '* ' or '- ') on separate lines.
    - Never output all list items inline within a single paragraph. Every list item MUST start on a new line with a bullet.
    - Use bold (**text**) for headers or key terms (like **Leaf Mold**, **Chemical Treatment:**) to make the text easily readable.
+   - When discussing prices, market rates, or Minimum Support Prices (MSP), ALWAYS include the exact price details, numeric values, and units (e.g., '/quintal', '/acre') exactly as provided in the context, along with the Rupee symbol (₹). Format prices clearly in lists or markdown tables. Do not omit, simplify, or modify currency symbols or prices.
 6. If a question is completely unrelated to agriculture (e.g., general history, sports, entertainment, general non-farming queries):
    - Politely decline to answer, stating that you are KrishiMitra and can only assist with agricultural and farming queries.
 7. General guidelines:
@@ -229,11 +230,65 @@ async def _fetch_weather(location: str) -> Tuple[float, float, str]:
     return None, None, matched
 
 
+_GREETING_KEYWORDS = {
+    "hello", "hi", "hey", "namaste", "namaskar", "namaskaram", "pranam",
+    "good morning", "good afternoon", "good evening", "vanakkam", "yo", "sup"
+}
+
+_AGRI_KEYWORDS = {
+    "farm", "farming", "farmer", "farmers", "agriculture", "agricultural", "agri",
+    "crop", "crops", "cultivate", "cultivation", "sow", "sowing", "harvest", "harvesting",
+    "soil", "fertilizer", "fertilizers", "manure", "compost", "vermicompost", "fym", "nitrogen", "phosphorus", "potassium", "potash", "urea", "npk",
+    "paddy", "rice", "wheat", "maize", "corn", "cotton", "groundnut", "groundnuts", "peanut", "peanuts", "chilli", "chillies", "chili", "chilis", "tomato", "tomatoes", "onion", "onions", "potato", "potatoes", "brinjal", "eggplant", "cabbage", "cauliflower", "banana", "soybean", "soybeans", "pulse", "pulses", "gram", "chana", "tur", "arhar", "moong", "urad", "mustard", "rapeseed", "sesame", "sesamum", "sunflower", "safflower", "barley", "ragi", "jowar", "sorghum", "bajra", "millet", "millets",
+    "seed", "seeds", "seedling", "seedlings", "nursery",
+    "irrigation", "irrigate", "water", "watering", "drip", "sprinkler", "monsoon", "rain", "rainfall", "weather", "temperature", "forecast", "climate",
+    "pest", "pests", "insect", "insects", "bug", "bugs", "worm", "worms", "bollworm", "hopper", "aphid", "aphids", "thrips", "mite", "mites", "whitefly", "whiteflies", "caterpillar", "caterpillars",
+    "disease", "diseases", "fungus", "fungal", "virus", "viral", "bacteria", "bacterial", "blight", "blast", "rot", "mold", "mould", "rust", "mosaic", "wilt", "mildew", "spot", "spots", "canker",
+    "pesticide", "pesticides", "insecticide", "insecticides", "fungicide", "fungicides", "herbicide", "herbicides", "weedicide", "weedicides", "weed", "weeds", "weeding",
+    "price", "prices", "cost", "costs", "msp", "market", "markets", "mandi", "mandis", "enam", "wholesale", "rate", "rates", "quintal", "rupee", "rupees", "rs", "₹",
+    "subsidy", "subsidies", "scheme", "schemes", "loan", "loans", "kisan", "krishi", "rythu", "bandhu", "bima", "credit", "kcc", "pmksy", "pmfby", "pmkisan", "fci", "markfed", "rbk", "enam",
+    "yield", "production", "variety", "varieties", "hybrid", "hybrids", "bt", "bpt", "mtu", "nlr", "rnr", "samba", "mahsuri", "teja"
+}
+
+def _is_greeting(text: str) -> bool:
+    """Check if the text is a simple greeting."""
+    import re
+    lowered = text.lower().strip()
+    cleaned = re.sub(r'[^\w\s]', '', lowered)
+    if cleaned in _GREETING_KEYWORDS:
+        return True
+    words = cleaned.split()
+    if len(words) <= 2 and any(w in _GREETING_KEYWORDS for w in words):
+        return True
+    return False
+
+def _is_agriculture_query(text: str) -> bool:
+    """Check if the query text (in English) contains agriculture-related terms."""
+    import re
+    lowered = text.lower()
+    
+    # Normalize punctuation/spaces
+    tokens = set(re.findall(r'\b\w+\b', lowered))
+    
+    # Check for direct word matches first
+    if tokens.intersection(_AGRI_KEYWORDS):
+        return True
+        
+    # Also check for certain substring matches (e.g. "agri", "krishi", "rythu", "weather")
+    substring_keywords = ["agri", "krishi", "rythu", "kisan", "mandi", "weather", "temp", "rain", "irrigate", "fertiliz"]
+    for kw in substring_keywords:
+        if kw in lowered:
+            return True
+            
+    return False
+
+
 async def process_query(
     user_message: str,
     image_bytes: bytes | None = None,
     file_bytes: bytes | None = None,
     file_name: str | None = None,
+    override_lang: str = "",
 ) -> AgentResponse:
     """
     Full pipeline: detect language → translate → RAG/CNN/Doc extract → Gemini → translate back.
@@ -248,6 +303,33 @@ async def process_query(
         logger.debug("Translated query: %s", english_query)
     else:
         english_query = user_message
+
+    # Resolve target output language
+    if lang_code in ("te", "hi"):
+        output_lang = lang_code
+    elif override_lang in ("te", "hi"):
+        output_lang = override_lang
+    else:
+        output_lang = lang_code
+
+    # ── 2b. Agriculture Guard ─────────────────────────────────────────────────
+    # If the user uploads an image/file or greets the bot, bypass the guard.
+    if not (image_bytes or file_bytes) and not _is_greeting(english_query) and not _is_agriculture_query(english_query):
+        reject_msg_en = "I am KrishiMitra, your AI agricultural advisor. I can only assist with agriculture, farming, and crop-related queries."
+        if output_lang != "en":
+            reject_msg_translated = from_english(reject_msg_en, output_lang)
+        else:
+            reject_msg_translated = reject_msg_en
+        logger.info("Query rejected by agriculture guard. Resolved lang: %s", output_lang)
+        return AgentResponse(
+            response=reject_msg_translated,
+            detected_language=lang_code,
+            language_name=lang_name,
+            agent_type="general",
+            sources=[],
+            english_query=english_query,
+            english_response=reject_msg_en,
+        )
 
     # ── 3. Handle document/text parsing ───────────────────────────────────────
     extracted_text = ""
@@ -272,7 +354,6 @@ async def process_query(
             if cnn_result:
                 predictions_context_parts = []
                 for item in cnn_result.get("top_k", []):
-                    # Include predictions with confidence >= 10% (and always include the top 1 prediction) for better reasoning context
                     if item["confidence"] >= 10.0 or item["rank"] == 1:
                         from disease_info import get_disease_info
                         details = get_disease_info(item["class"])
@@ -282,19 +363,19 @@ async def process_query(
                         p_cond = p_parts[1].replace("_", " ").strip() if len(p_parts) > 1 else "Condition"
                         
                         predictions_context_parts.append(
-                            f"Prediction Rank {item['rank']}: {p_plant} — {p_cond} (Confidence: {item['confidence']}%)\n"
-                            f"  - Severity: {details.get('severity', 'moderate')}\n"
-                            f"  - Cause: {details.get('cause', 'N/A')}\n"
-                            f"  - Organic Control: {details.get('organic', 'N/A')}\n"
-                            f"  - Chemical Control: {details.get('chemical', 'N/A')}\n"
+                            f"Prediction Rank {item['rank']}: {p_plant} — {p_cond} (Confidence: {item['confidence']}%)\\n"
+                            f"  - Severity: {details.get('severity', 'moderate')}\\n"
+                            f"  - Cause: {details.get('cause', 'N/A')}\\n"
+                            f"  - Organic Control: {details.get('organic', 'N/A')}\\n"
+                            f"  - Chemical Control: {details.get('chemical', 'N/A')}\\n"
                             f"  - Prevention: {details.get('prevention', 'N/A')}"
                         )
                 
                 if predictions_context_parts:
                     cnn_info = (
-                        "CNN DISEASE CLASSIFIER TOP SUGGESTIONS:\n"
-                        + "\n\n".join(predictions_context_parts)
-                        + "\n\nInstructions: Analyze the uploaded image. Check which of the suggestions above fits the visual symptoms (spots, patterns, colors) on the leaf image. Select the most accurate disease and format your response using that suggestion's details (cause, organic/chemical control, prevention). If you are uncertain or the suggestions do not fit, use your general expertise to diagnose but state the alternatives."
+                        "CNN DISEASE CLASSIFIER TOP SUGGESTIONS:\\n"
+                        + "\\n\\n".join(predictions_context_parts)
+                        + "\\n\\nInstructions: Analyze the uploaded image. Check which of the suggestions above fits the visual symptoms (spots, patterns, colors) on the leaf image. Select the most accurate disease and format your response using that suggestion's details (cause, organic/chemical control, prevention). If you are uncertain or the suggestions do not fit, use your general expertise to diagnose but state the alternatives."
                     )
                     cnn_agent_type = "disease"
                     cnn_sources = ["AgriGPT Disease Diagnosis Database 2026"]
@@ -309,9 +390,9 @@ async def process_query(
             avg_temp, rain_prob, matched_loc = await _fetch_weather(english_query)
             if avg_temp is not None:
                 weather_context = (
-                    f"Live Weather for {matched_loc}:\n"
-                    f"- Current average temperature: {avg_temp:.1f}°C\n"
-                    f"- Expected precipitation probability (next day): {rain_prob}%\n"
+                    f"Live Weather for {matched_loc}:\\n"
+                    f"- Current average temperature: {avg_temp:.1f}°C\\n"
+                    f"- Expected precipitation probability (next day): {rain_prob}%\\n"
                 )
         except Exception as e:
             logger.error("Failed to fetch live weather: %s", e)
@@ -319,11 +400,10 @@ async def process_query(
     chunks = retrieve(english_query)
     context = format_context(chunks)
     if weather_context:
-        # prepend weather info so Gemini sees it first
-        context = weather_context + "\n\n" + context
+        context = weather_context + "\\n\\n" + context
 
     agent_type = get_agent_from_chunks(chunks)
-    sources = list({c["source"] for c in chunks})  # deduplicated
+    sources = list({c["source"] for c in chunks})
 
     if cnn_agent_type:
         agent_type = cnn_agent_type
@@ -331,15 +411,15 @@ async def process_query(
         sources = list(set(sources + cnn_sources))
 
     if extracted_text:
-        context = f"[Document Content ({file_name})]:\n{extracted_text}\n\n" + context
+        context = f"[Document Content ({file_name})]:\\n{extracted_text}\\n\\n" + context
 
     # ── 6. Gemini LLM ─────────────────────────────────────────────────────────
     prompt = _build_prompt(english_query, context, cnn_info)
     english_answer = _call_gemini(prompt, pil_image)
 
     # ── 7. Translate answer back to user's language ───────────────────────────
-    if lang_code != "en":
-        final_answer = from_english(english_answer, lang_code)
+    if output_lang != "en":
+        final_answer = from_english(english_answer, output_lang)
     else:
         final_answer = english_answer
 
@@ -352,4 +432,5 @@ async def process_query(
         english_query=english_query,
         english_response=english_answer,
     )
+
 

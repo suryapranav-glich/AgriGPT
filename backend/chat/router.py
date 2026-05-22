@@ -31,6 +31,7 @@ class ChatRequest(BaseModel):
     image_base64: Optional[str] = None
     file_base64: Optional[str] = None
     file_name: Optional[str] = None
+    override_lang: Optional[str] = ""
 
 
 class ChatResponse(BaseModel):
@@ -177,6 +178,7 @@ async def chat(req: ChatRequest, authorization: str = Header(default="")):
             image_bytes=image_bytes,
             file_bytes=file_bytes,
             file_name=req.file_name,
+            override_lang=req.override_lang or "",
         )
     except Exception as exc:
         logger.error("Chat query processing failed: %s", exc)
