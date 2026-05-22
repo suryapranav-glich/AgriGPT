@@ -41,3 +41,5 @@ backend/data/faiss_index/chunks.json
 *.njsproj
 *.sln
 *.sw?
+.vercel/
+
