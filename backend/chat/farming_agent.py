@@ -131,29 +131,14 @@ def _call_gemini(prompt: str, pil_image: Image.Image | None = None) -> str:
 
 def _get_cnn_prediction(pil_image: Image.Image) -> dict | None:
     """
-    Look up the loaded EfficientNet model from sys.modules["app"]
-    and run a prediction on the provided PIL image.
+    Run prediction on the Hugging Face Space for the uploaded image.
     """
-    import sys
-    app_module = sys.modules.get("app")
-    if not app_module:
-        logger.debug("app module not found in sys.modules (not fully loaded yet)")
-        return None
-    
-    model = getattr(app_module, "_model", None)
-    class_names = getattr(app_module, "_class_names", None)
-    device = getattr(app_module, "_device", None)
-    
-    if model is None or class_names is None or device is None:
-        logger.debug("CNN model, class_names, or device not loaded in app module yet")
-        return None
-        
     try:
         from inference import predict_from_pil
-        result = predict_from_pil(pil_image, model, class_names, device)
+        result = predict_from_pil(pil_image)
         return result
     except Exception as e:
-        logger.error("Error executing CNN prediction in farming_agent: %s", e)
+        logger.error("Error executing HF CNN prediction in farming_agent: %s", e)
         return None
 
 

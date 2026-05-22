@@ -38,7 +38,7 @@ WEIGHTS_PATH = os.path.join(BASE_DIR, "agrigpt_production_weights.pth")
 CLASSES_PATH = os.path.join(BASE_DIR, "class_names.json")
 
 # ── Feature 1: Disease Detection ──────────────────────────────────────────────
-from inference import load_model, predict_from_pil
+from inference import predict_from_pil
 
 # ── Feature 3: Fertilizer RAG engine ─────────────────────────────────────────
 # from fertilizer.rag_engine import load_rag_engine
@@ -107,15 +107,8 @@ app.include_router(chat_router)
 # =============================================================================
 @app.on_event("startup")
 async def startup_event():
-    global _model, _class_names, _device
-
     # Feature 1: Disease detection model
-    print("[AgriGPT] Loading disease detection model…")
-    _model, _class_names, _device = load_model(
-        weights_path=WEIGHTS_PATH,
-        classes_path=CLASSES_PATH,
-    )
-    print(f"[AgriGPT] Disease model ready — {len(_class_names)} classes on [{_device}]")
+    print("[AgriGPT] Using Hugging Face Space for disease detection.")
 
     # Feature 3: Fertilizer RAG engine
     print("[AgriGPT] Loading fertilizer RAG engine…")
@@ -152,11 +145,6 @@ async def startup_event():
 
 
 
-_model       = None
-_class_names = None
-_device      = None
-
-
 # =============================================================================
 # FEATURE 1 — DISEASE DETECTION
 # =============================================================================
@@ -164,8 +152,8 @@ _device      = None
 def health():
     return {
         "status"  : "ok",
-        "classes" : len(_class_names) if _class_names else 0,
-        "device"  : _device,
+        "classes" : 38,
+        "device"  : "cpu",
     }
 
 
@@ -181,7 +169,7 @@ async def diagnose(file: UploadFile = File(...), authorization: str = Header(def
 
     contents  = await file.read()
     pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-    result    = predict_from_pil(pil_image, _model, _class_names, _device, top_k=5)
+    result    = predict_from_pil(pil_image, top_k=5)
 
     top_confidence = result["confidence"] / 100.0
     top_class      = result["predicted_class"]

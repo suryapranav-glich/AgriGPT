@@ -29,7 +29,15 @@ def load_model(
     without loading heavy PyTorch models locally.
     """
     print("[AgriGPT] Using Hugging Face Space for disease detection.")
-    return None, None, "cpu"
+    import json
+    class_names = []
+    if classes_path and os.path.exists(classes_path):
+        try:
+            with open(classes_path, "r", encoding="utf-8") as f:
+                class_names = json.load(f)
+        except Exception as e:
+            print(f"[AgriGPT] Failed to load class names from {classes_path}: {e}")
+    return None, class_names, "cpu"
 
 
 def predict_from_pil(
