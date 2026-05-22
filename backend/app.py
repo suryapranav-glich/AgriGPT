@@ -120,7 +120,7 @@ async def startup_event():
     # Feature 3: Fertilizer RAG engine
     print("[AgriGPT] Loading fertilizer RAG engine…")
     try:
-        load_rag_engine()
+        # load_rag_engine()
         print("[AgriGPT] Fertilizer RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Fertilizer RAG skipped: {e}")
@@ -128,7 +128,7 @@ async def startup_event():
     # Feature 6: Government Schemes Q&A
     print("[AgriGPT] Loading government schemes RAG engine…")
     try:
-        load_schemes_engine()
+        # load_schemes_engine()
         print("[AgriGPT] Government schemes RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Government schemes RAG skipped: {e}")
@@ -136,7 +136,7 @@ async def startup_event():
     # Feature 7: Market Advisor Graph
     print("[AgriGPT] Loading market advisor graph…")
     try:
-        load_market_graph()
+        # load_market_graph()
         print("[AgriGPT] Market advisor graph ready.")
     except Exception as e:
         print(f"[AgriGPT] [WARNING] Market advisor graph skipped: {e}")
@@ -145,7 +145,7 @@ async def startup_event():
     print("[AgriGPT] Building FarmAI FAISS index…")
     try:
         from chat.rag_pipeline import build_index as build_chat_index
-        build_chat_index()
+        # build_chat_index()
         print("[AgriGPT] FarmAI RAG index ready.")
     except Exception as e:
         print(f"[AgriGPT] [WARNING] FarmAI Chat RAG skipped: {e}")
@@ -167,6 +167,11 @@ def health():
         "classes" : len(_class_names) if _class_names else 0,
         "device"  : _device,
     }
+
+
+@app.get("/")
+def home():
+    return {"message": "AgriGPT Backend Running"}
 
 
 @app.post("/diagnose")
