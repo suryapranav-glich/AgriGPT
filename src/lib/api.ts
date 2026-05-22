@@ -5,7 +5,7 @@
 // JWT token is automatically attached from localStorage.
 // =============================================================================
 
-export const BACKEND_URL = "http://localhost:8001";
+export const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "agrigpt_token";
 
