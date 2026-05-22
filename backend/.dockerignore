@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git
+.github
+venv/
+.venv
+.env.local
+.env.development
+.env.production
+test.webm
