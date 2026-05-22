@@ -12,7 +12,7 @@ from PIL import Image
 # =============================================================================
 # CONFIG
 # =============================================================================
-HF_SPACE_URL = "https://ssuryapranav-agrimodel-disease.hf.space"
+HF_SPACE_URL = os.getenv("HF_SPACE_URL", "https://ssuryapranav-agrimodel-disease.hf.space").strip()
 
 # Mock variables to preserve compatibility with existing app.py code
 DEVICE = "cpu"
