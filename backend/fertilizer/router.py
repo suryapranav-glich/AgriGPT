@@ -105,8 +105,12 @@ async def fertilizer_recommend(req: FertilizerRequest, authorization: str = Head
         user_id = decode_token(authorization.split(" ", 1)[1])
     if user_id:
         try:
+            try:
+                parsed_uid = ObjectId(user_id)
+            except Exception:
+                parsed_uid = user_id
             chat_history_col().insert_one({
-                "user_id": ObjectId(user_id),
+                "user_id": parsed_uid,
                 "agent": "fertilizer",
                 "query": f"Fertilizer recommendation for {req.crop} ({req.soil_type})",
                 "created_at": datetime.now(timezone.utc)

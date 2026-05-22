@@ -125,12 +125,16 @@ async def get_irrigation_plan(req: IrrigationRequest, authorization: str = Heade
 
     if user_id:
         try:
+            try:
+                parsed_uid = ObjectId(user_id)
+            except Exception:
+                parsed_uid = user_id
             now = datetime.now(timezone.utc)
             # "Tomorrow" if morning, or specify next day
             next_schedule = f"Tomorrow, {best_time_window}"
             
             irrigation_logs_col().insert_one({
-                "user_id": ObjectId(user_id),
+                "user_id": parsed_uid,
                 "timestamp": now.isoformat(),
                 "crop": req.crop,
                 "location": matched_name,
@@ -140,7 +144,7 @@ async def get_irrigation_plan(req: IrrigationRequest, authorization: str = Heade
             
             from auth.db import chat_history_col
             chat_history_col().insert_one({
-                "user_id": ObjectId(user_id),
+                "user_id": parsed_uid,
                 "agent": "weather",
                 "query": f"Generated irrigation plan for {req.crop}",
                 "created_at": now

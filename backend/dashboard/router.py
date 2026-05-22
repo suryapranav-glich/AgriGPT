@@ -29,14 +29,18 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
-def _require_user_id(authorization: str) -> ObjectId:
+def _require_user_id(authorization: str):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     token = authorization.split(" ", 1)[1]
     uid = decode_token(token)
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return ObjectId(uid)
+    try:
+        return ObjectId(uid)
+    except Exception:
+        return uid
+
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -66,10 +70,19 @@ def get_metrics(authorization: str = Header(default="")):
     if not doc:
         raise HTTPException(status_code=404, detail="User not found")
 
-    farm = farm_profiles_col().find_one({"user_id": uid}) or {}
+    user_filter = uid
+    if isinstance(uid, ObjectId):
+        user_filter = {"$in": [uid, str(uid)]}
+    elif isinstance(uid, str):
+        try:
+            user_filter = {"$in": [ObjectId(uid), uid]}
+        except Exception:
+            user_filter = uid
+
+    farm = farm_profiles_col().find_one({"user_id": user_filter}) or {}
 
     # 1. Active Crop & Market Price (pull latest market query)
-    latest_market = market_queries_col().find_one({"user_id": uid}, sort=[("timestamp", -1)])
+    latest_market = market_queries_col().find_one({"user_id": user_filter}, sort=[("timestamp", -1)])
     if latest_market:
         active_crop = latest_market.get("crop", farm.get("active_crop"))
         mandi_price = latest_market.get("price", farm.get("mandi_price"))
@@ -80,7 +93,7 @@ def get_metrics(authorization: str = Header(default="")):
         mandi_location = farm.get("mandi_location", "Local Market")
 
     # 2. Disease Diagnosis (pull latest diagnosis)
-    latest_disease = disease_diagnoses_col().find_one({"user_id": uid}, sort=[("updated_at", -1)])
+    latest_disease = disease_diagnoses_col().find_one({"user_id": user_filter}, sort=[("updated_at", -1)])
     if latest_disease:
         last_diagnosis = latest_disease.get("disease_detected", farm.get("last_diagnosis"))
         last_diagnosis_severity = latest_disease.get("severity", farm.get("last_diagnosis_severity", "none"))
@@ -89,19 +102,21 @@ def get_metrics(authorization: str = Header(default="")):
         last_diagnosis_severity = farm.get("last_diagnosis_severity", "none")
 
     # 3. Irrigation
-    latest_irrigation = irrigation_logs_col().find_one({"user_id": uid}, sort=[("timestamp", -1)])
+    latest_irrigation = irrigation_logs_col().find_one({"user_id": user_filter}, sort=[("timestamp", -1)])
     if latest_irrigation:
         next_irrigation = latest_irrigation.get("next_schedule", farm.get("next_irrigation"))
     else:
         next_irrigation = farm.get("next_irrigation")
 
     # 4. Fetch recent activity (combine text chat and voice queries)
-    raw_chat = list(chat_history_col().find({"user_id": uid}).sort("created_at", -1).limit(5))
-    raw_voice = list(voice_queries_col().find({"user_id": uid}).sort("timestamp", -1).limit(5))
+    raw_chat = list(chat_history_col().find({"user_id": user_filter}).sort("created_at", -1).limit(5))
+    raw_voice = list(voice_queries_col().find({"user_id": user_filter}).sort("timestamp", -1).limit(5))
 
     combined_activity = []
     for c in raw_chat:
         dt = c.get("created_at")
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         combined_activity.append({
             "agent":  c.get("agent", "general"),
             "query":  c.get("query", ""),
@@ -118,6 +133,8 @@ def get_metrics(authorization: str = Header(default="")):
                 dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
             except ValueError:
                 dt = datetime.now(timezone.utc)
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         combined_activity.append({
             "agent":  v.get("agent_type", "market"),
             "query":  v.get("transcript", ""),

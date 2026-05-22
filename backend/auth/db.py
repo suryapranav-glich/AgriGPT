@@ -2,7 +2,7 @@
 # backend/auth/db.py — MongoDB connection & helper collections
 # =============================================================================
 import os
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.collection import Collection
 
 _client: MongoClient | None = None
@@ -70,7 +70,19 @@ def scheme_queries_col() -> Collection:
 
 def sessions_col() -> Collection:
     col = get_db()["sessions"]
-    col.create_index([("user_id", ASCENDING)], background=True)
+    col.create_index([("user_id", ASCENDING), ("last_active", DESCENDING)], background=True)
+    return col
+
+
+def user_sessions_col() -> Collection:
+    col = get_db()["user_sessions"]
+    col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)], background=True)
+    return col
+
+
+def messages_col() -> Collection:
+    col = get_db()["messages"]
+    col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)], background=True)
     return col
 
 

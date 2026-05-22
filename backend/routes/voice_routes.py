@@ -142,8 +142,12 @@ Do NOT use markdown, bold text, or asterisks. Write in plain text."""
 
         if user_id:
             try:
+                try:
+                    parsed_uid = ObjectId(user_id)
+                except Exception:
+                    parsed_uid = user_id
                 voice_queries_col().insert_one({
-                    "user_id": ObjectId(user_id),
+                    "user_id": parsed_uid,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "detected_language": lang,
                     "transcript": text,
@@ -195,7 +199,17 @@ async def get_voice_history(authorization: str = Header(default="")):
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
         
-    docs = voice_queries_col().find({"user_id": ObjectId(user_id)}).sort("timestamp", -1).limit(10)
+    try:
+        parsed_uid = ObjectId(user_id)
+    except Exception:
+        parsed_uid = user_id
+
+    docs = voice_queries_col().find({
+        "$or": [
+            {"user_id": parsed_uid},
+            {"user_id": user_id}
+        ]
+    }).sort("timestamp", -1).limit(10)
     
     history = []
     for doc in docs:

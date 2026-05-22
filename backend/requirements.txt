@@ -43,3 +43,8 @@ python-multipart>=0.0.9
 google-auth>=2.29.0
 requests>=2.31.0
 pydantic[email]>=2.0.0
+
+# Feature: FarmAI Multilingual Chatbot
+langdetect>=1.0.9
+deep-translator>=1.11.4
+

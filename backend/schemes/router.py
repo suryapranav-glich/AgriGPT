@@ -69,8 +69,12 @@ async def schemes_ask(req: SchemeAskRequest, authorization: str = Header(default
             user_id = decode_token(authorization.split(" ", 1)[1])
         if user_id:
             try:
+                parsed_uid = ObjectId(user_id)
+            except Exception:
+                parsed_uid = user_id
+            try:
                 chat_history_col().insert_one({
-                    "user_id": ObjectId(user_id),
+                    "user_id": parsed_uid,
                     "agent": "scheme",
                     "query": req.question.strip(),
                     "created_at": datetime.now(timezone.utc)

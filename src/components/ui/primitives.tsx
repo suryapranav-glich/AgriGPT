@@ -111,6 +111,7 @@ export function Button({
   variant = "primary",
   disabled = false,
   style: styleProp,
+  id,
 }: {
   children: ReactNode;
   className?: string;
@@ -119,10 +120,12 @@ export function Button({
   variant?: "primary" | "secondary";
   disabled?: boolean;
   style?: CSSProperties;
+  id?: string;
 }) {
   const isPrimary = variant === "primary";
   return (
     <button
+      id={id}
       type={type}
       onClick={onClick}
       className={className}

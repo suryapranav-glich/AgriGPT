@@ -18,7 +18,7 @@ from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Header
 from pymongo.errors import DuplicateKeyError
 
-from .db import users_col, farm_profiles_col, sessions_col
+from .db import users_col, farm_profiles_col, user_sessions_col
 from .models import (
     SignupRequest,
     SigninRequest,
@@ -49,7 +49,11 @@ def _require_user(authorization: str) -> dict:
     user_id = decode_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    doc = users_col().find_one({"_id": ObjectId(user_id)})
+    try:
+        parsed_id = ObjectId(user_id)
+    except Exception:
+        parsed_id = user_id
+    doc = users_col().find_one({"_id": parsed_id})
     if not doc:
         raise HTTPException(status_code=404, detail="User not found")
     return doc
@@ -119,7 +123,7 @@ def signup(req: SignupRequest):
     })
 
     # Log session
-    sessions_col().insert_one({
+    user_sessions_col().insert_one({
         "user_id": uid,
         "token_hash": hash_password(token),
         "device": "web",
@@ -159,7 +163,7 @@ def signin(req: SigninRequest):
     token = create_token(str(doc["_id"]))
     
     # Log session
-    sessions_col().insert_one({
+    user_sessions_col().insert_one({
         "user_id": doc["_id"],
         "token_hash": hash_password(token),
         "device": "web",
@@ -262,7 +266,7 @@ def google_auth(req: GoogleAuthRequest):
 
     token = create_token(str(doc["_id"]))
     
-    sessions_col().insert_one({
+    user_sessions_col().insert_one({
         "user_id": doc["_id"],
         "token_hash": hash_password(token),
         "device": "web",
