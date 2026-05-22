@@ -72,7 +72,7 @@ Rules:
 4. If the farmer asks for weather, temperature, or forecast information, provide real-time data using reliable sources (Open-Meteo) instead of static advice.
 5. Formatting & Price Rules (CRITICAL):
    - Always use clean, standard Markdown.
-   - Use double newlines (\\n\\n) to separate different paragraphs and sections. Never bundle everything into one block of text.
+   - Use double newlines (\n\n) to separate different paragraphs and sections. Never bundle everything into one block of text.
    - When presenting lists of recommendations (like treatments, prevention tips, symptoms), ALWAYS format them as bullet points (using '* ' or '- ') on separate lines.
    - Never output all list items inline within a single paragraph. Every list item MUST start on a new line with a bullet.
    - Use bold (**text**) for headers or key terms (like **Leaf Mold**, **Chemical Treatment:**) to make the text easily readable.
@@ -363,19 +363,19 @@ async def process_query(
                         p_cond = p_parts[1].replace("_", " ").strip() if len(p_parts) > 1 else "Condition"
                         
                         predictions_context_parts.append(
-                            f"Prediction Rank {item['rank']}: {p_plant} — {p_cond} (Confidence: {item['confidence']}%)\\n"
-                            f"  - Severity: {details.get('severity', 'moderate')}\\n"
-                            f"  - Cause: {details.get('cause', 'N/A')}\\n"
-                            f"  - Organic Control: {details.get('organic', 'N/A')}\\n"
-                            f"  - Chemical Control: {details.get('chemical', 'N/A')}\\n"
+                            f"Prediction Rank {item['rank']}: {p_plant} — {p_cond} (Confidence: {item['confidence']}%)\n"
+                            f"  - Severity: {details.get('severity', 'moderate')}\n"
+                            f"  - Cause: {details.get('cause', 'N/A')}\n"
+                            f"  - Organic Control: {details.get('organic', 'N/A')}\n"
+                            f"  - Chemical Control: {details.get('chemical', 'N/A')}\n"
                             f"  - Prevention: {details.get('prevention', 'N/A')}"
                         )
                 
                 if predictions_context_parts:
                     cnn_info = (
-                        "CNN DISEASE CLASSIFIER TOP SUGGESTIONS:\\n"
-                        + "\\n\\n".join(predictions_context_parts)
-                        + "\\n\\nInstructions: Analyze the uploaded image. Check which of the suggestions above fits the visual symptoms (spots, patterns, colors) on the leaf image. Select the most accurate disease and format your response using that suggestion's details (cause, organic/chemical control, prevention). If you are uncertain or the suggestions do not fit, use your general expertise to diagnose but state the alternatives."
+                        "CNN DISEASE CLASSIFIER TOP SUGGESTIONS:\n"
+                        + "\n\n".join(predictions_context_parts)
+                        + "\n\nInstructions: Analyze the uploaded image. Check which of the suggestions above fits the visual symptoms (spots, patterns, colors) on the leaf image. Select the most accurate disease and format your response using that suggestion's details (cause, organic/chemical control, prevention). If you are uncertain or the suggestions do not fit, use your general expertise to diagnose but state the alternatives."
                     )
                     cnn_agent_type = "disease"
                     cnn_sources = ["AgriGPT Disease Diagnosis Database 2026"]
@@ -390,9 +390,9 @@ async def process_query(
             avg_temp, rain_prob, matched_loc = await _fetch_weather(english_query)
             if avg_temp is not None:
                 weather_context = (
-                    f"Live Weather for {matched_loc}:\\n"
-                    f"- Current average temperature: {avg_temp:.1f}°C\\n"
-                    f"- Expected precipitation probability (next day): {rain_prob}%\\n"
+                    f"Live Weather for {matched_loc}:\n"
+                    f"- Current average temperature: {avg_temp:.1f}°C\n"
+                    f"- Expected precipitation probability (next day): {rain_prob}%\n"
                 )
         except Exception as e:
             logger.error("Failed to fetch live weather: %s", e)
@@ -400,7 +400,7 @@ async def process_query(
     chunks = retrieve(english_query)
     context = format_context(chunks)
     if weather_context:
-        context = weather_context + "\\n\\n" + context
+        context = weather_context + "\n\n" + context
 
     agent_type = get_agent_from_chunks(chunks)
     sources = list({c["source"] for c in chunks})
@@ -411,7 +411,7 @@ async def process_query(
         sources = list(set(sources + cnn_sources))
 
     if extracted_text:
-        context = f"[Document Content ({file_name})]:\\n{extracted_text}\\n\\n" + context
+        context = f"[Document Content ({file_name})]:\n{extracted_text}\n\n" + context
 
     # ── 6. Gemini LLM ─────────────────────────────────────────────────────────
     prompt = _build_prompt(english_query, context, cnn_info)
