@@ -21,7 +21,7 @@ from auth.utils import decode_token
 from bson import ObjectId
 from datetime import datetime, timezone
 
-from fertilizer.rag_engine import recommend
+# from fertilizer.rag_engine import recommend
 
 
 router = APIRouter(prefix="/fertilizer", tags=["Fertilizer Recommendation"])
@@ -81,6 +81,7 @@ async def fertilizer_recommend(req: FertilizerRequest, authorization: str = Head
     - Cautions & ICAR source reference
     """
     try:
+        from fertilizer.rag_engine import recommend
         result = recommend(
             crop         = req.crop.strip(),
             soil_type    = req.soil_type.strip(),

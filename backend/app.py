@@ -41,18 +41,18 @@ CLASSES_PATH = os.path.join(BASE_DIR, "class_names.json")
 from inference import load_model, predict_from_pil
 
 # ── Feature 3: Fertilizer RAG engine ─────────────────────────────────────────
-from fertilizer.rag_engine import load_rag_engine
+# from fertilizer.rag_engine import load_rag_engine
 from fertilizer.router import router as fertilizer_router
 
 # ── Feature 6: Government Schemes Q&A ────────────────────────────────────────
-from schemes.rag_engine import load_schemes_engine
+# from schemes.rag_engine import load_schemes_engine
 from schemes.router import router as schemes_router
 
 # ── Feature 5: Weather-Based Irrigation Planning (Agent 2) ───────────────────
 from irrigation.router import router as irrigation_router
 
 # ── Feature 7: Crop Price Prediction & Market Advisor ────────────────────────
-from market import load_market_graph
+# from market import load_market_graph
 from market import router as market_router
 
 # ── Feature 8: Voice Assistant ───────────────────────────────────────────────

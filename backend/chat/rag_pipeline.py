@@ -66,7 +66,8 @@ def retrieve(query: str, top_k: int | None = None) -> list[dict]:
     Returns a list of chunk dicts with an added 'score' key.
     """
     if _index is None or _model is None:
-        raise RuntimeError("RAG index not built — call build_index() first.")
+        logger.warning("RAG index not built — returning empty context.")
+        return []
 
     k = top_k or settings.top_k_chunks
 

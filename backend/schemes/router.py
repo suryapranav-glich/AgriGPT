@@ -19,7 +19,7 @@ from auth.utils import decode_token
 from bson import ObjectId
 from datetime import datetime, timezone
 
-from schemes.rag_engine import ask
+# from schemes.rag_engine import ask
 from schemes.static_kb  import SCHEMES_KB
 
 router = APIRouter(prefix="/schemes", tags=["Government Schemes Q&A"])
@@ -58,6 +58,7 @@ async def schemes_ask(req: SchemeAskRequest, authorization: str = Header(default
     Returns structured answer with source_highlights (file, page, snippet).
     """
     try:
+        from schemes.rag_engine import ask
         result = ask(
             question = req.question.strip(),
             state    = (req.state or "").strip(),
