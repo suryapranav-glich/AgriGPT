@@ -11,7 +11,9 @@ _client: MongoClient | None = None
 def get_client() -> MongoClient:
     global _client
     if _client is None:
-        uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        uri = os.getenv("MONGO_URI")
+        if not uri:
+            raise ValueError("MONGO_URI environment variable is not set!")
         _client = MongoClient(uri, serverSelectionTimeoutMS=5000)
     return _client
 
