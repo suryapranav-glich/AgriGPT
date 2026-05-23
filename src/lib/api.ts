@@ -1,7 +1,7 @@
 // =============================================================================
 // src/lib/api.ts — Central API helper for all backend calls
 //
-// All requests go to the FastAPI backend at localhost:8001.
+// All requests go to the FastAPI backend at localhost:8000.
 // JWT token is automatically attached from localStorage.
 // =============================================================================
 

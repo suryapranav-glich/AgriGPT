@@ -27,7 +27,7 @@ interface SchemeAnswer {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const BACKEND = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+const BACKEND = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const filterKeys = ["all", "subsidies", "seeds", "insurance", "credit", "irrigationTab"] as const;
 

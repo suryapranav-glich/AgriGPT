@@ -139,7 +139,7 @@ function Market() {
   // Load available crops & districts on mount
   useEffect(() => {
     const fetchMetadata = async () => {
-      const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+      const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
       try {
         const res = await fetch(`${api_url}/api/market/crops`);
         if (res.ok) {
@@ -171,7 +171,7 @@ function Market() {
 
     setLoading(true);
     setError(null);
-    const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+    const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
     try {
       const res = await fetch(
         `${api_url}/api/market/prices?crop=${encodeURIComponent(selectedCrop)}&district=${encodeURIComponent(selectedDistrict)}&range=${range}`,
@@ -220,7 +220,7 @@ function Market() {
     setStreaming(true);
     setAdvisory("");
 
-    const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+    const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
     const url = `${api_url}/api/market/advisor/stream?crop=${encodeURIComponent(crop)}&district=${encodeURIComponent(district)}&price=${price}&action=${encodeURIComponent(action)}&trend_7d=${trend_7d}&pct_avg=${pct_avg}&lang=${lang}`;
 
     try {

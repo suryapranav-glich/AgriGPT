@@ -44,7 +44,7 @@ function Irrigation() {
 
     setIsCalculating(true);
     try {
-      const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+      const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${api_url}/irrigation/plan`, {
         method: "POST",
         headers: {

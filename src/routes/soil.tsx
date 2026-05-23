@@ -94,7 +94,7 @@ async function streamSoilAnalysis(
     plan: string,
   ) => void,
 ) {
-  const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+  const api_url = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
   const resp = await fetch(`${api_url}/soil/analyse`, {
     method: "POST",
     headers: {

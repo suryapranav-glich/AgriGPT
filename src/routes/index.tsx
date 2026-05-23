@@ -91,7 +91,7 @@ function Dashboard() {
           <p style={{ fontSize: 14, color: "#6b7280" }}>
             Could not load dashboard data. Make sure the backend is running at{" "}
             <code style={{ background: "#f3f4f6", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>
-              http://localhost:8001
+              http://localhost:8000
             </code>
           </p>
           <button

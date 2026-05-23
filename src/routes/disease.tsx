@@ -42,7 +42,7 @@ function DiseaseDetection() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+      const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${API_URL}/diagnose`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${localStorage.getItem("agrigpt_token")}` },
