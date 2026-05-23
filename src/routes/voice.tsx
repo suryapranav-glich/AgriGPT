@@ -46,6 +46,7 @@ function Voice() {
 
   // Fetch dynamic history from backend
   const [history, setHistory] = useState<{q: string, agent: AgentType, t: string}[]>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/voice/history`, {
@@ -295,17 +296,33 @@ function Voice() {
             <div style={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
               {t("recentVoiceQueries")}
             </div>
-            <ul className="mt-2 divide-y" style={{ borderColor: "#f5f5f5" }}>
-              {history.map((h, i) => (
-                <li key={i} className="py-3 flex items-center gap-3">
-                  <span className="flex-1 truncate" style={{ fontSize: 13, color: "#1a1a1a" }}>
-                    {h.q}
-                  </span>
-                  <AgentPill type={h.agent} />
-                  <span style={{ fontSize: 12, color: "#6b7280" }}>{h.t}</span>
-                </li>
-              ))}
-            </ul>
+            {history.length > 0 ? (
+              <>
+                <ul className="mt-2 divide-y" style={{ borderColor: "#f5f5f5" }}>
+                  {(showAllHistory ? history : history.slice(0, 3)).map((h, i) => (
+                    <li key={i} className="py-3 flex items-center gap-3 animate-fade-in">
+                      <span className="flex-1 truncate" style={{ fontSize: 13, color: "#1a1a1a" }}>
+                        {h.q}
+                      </span>
+                      <AgentPill type={h.agent} />
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>{h.t}</span>
+                    </li>
+                  ))}
+                </ul>
+                {history.length > 3 && (
+                  <button
+                    onClick={() => setShowAllHistory(!showAllHistory)}
+                    className="mt-3 text-xs font-semibold text-[#3b6d11] hover:text-[#2d520d] hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    {showAllHistory ? "Show Less" : "Show More"}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="mt-4 text-xs text-gray-400 p-4 text-center">
+                No past queries.
+              </div>
+            )}
           </div>
 
         </main>

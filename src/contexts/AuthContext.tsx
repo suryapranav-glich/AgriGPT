@@ -16,6 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi, setToken, getToken, clearToken, type UserOut } from "../lib/api";
 
 export type User = UserOut & { token: string };
@@ -36,6 +37,7 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearToken();
     setUser(null);
     setError(null);
+    queryClient.clear();
     // Fire-and-forget — backend is stateless, just clears server-side hints
     authApi.logout().catch(() => {});
   };

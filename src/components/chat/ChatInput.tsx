@@ -116,19 +116,21 @@ export function ChatInput({
         >
           <Paperclip size={16} strokeWidth={1.75} style={{ color: "#6b7280" }} />
         </button>
-        <button
-          className="p-2 rounded-md hover:bg-[#f7f8f6] relative transition-colors"
-          onClick={onMic}
-        >
-          {listening ? (
-            <span
-              className="w-3 h-3 rounded-full block animate-pulse"
-              style={{ background: "#e24b4a" }}
-            />
-          ) : (
-            <Mic size={16} strokeWidth={1.75} style={{ color: "#6b7280" }} />
-          )}
-        </button>
+        {onMic && (
+          <button
+            className="p-2 rounded-md hover:bg-[#f7f8f6] relative transition-colors"
+            onClick={onMic}
+          >
+            {listening ? (
+              <span
+                className="w-3 h-3 rounded-full block animate-pulse"
+                style={{ background: "#e24b4a" }}
+              />
+            ) : (
+              <Mic size={16} strokeWidth={1.75} style={{ color: "#6b7280" }} />
+            )}
+          </button>
+        )}
         <input
           value={v}
           onChange={(e) => setV(e.target.value)}

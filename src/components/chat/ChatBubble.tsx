@@ -95,9 +95,13 @@ function formatMessageContent(text: string): React.ReactNode[] {
       continue;
     }
 
+    const isHR = /^(?:\*{3,}|-{3,}|_{3,})$/.test(line);
     const isBullet = /^[*|-]\s+/.test(line);
 
-    if (isBullet) {
+    if (isHR) {
+      pushCurrentList();
+      elements.push(<hr key={`hr-${i}`} className="my-4 border-t border-slate-200" />);
+    } else if (isBullet) {
       let content = line.substring(1).trim();
       currentListItems.push(
         <li key={`li-${i}`} className="leading-relaxed text-[13.5px] md:text-[14px]">

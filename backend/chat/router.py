@@ -85,19 +85,107 @@ async def list_sessions(authorization: str = Header(default="")):
         except Exception:
             pass
 
-        sessions = list(sessions_col().find({
-            "user_id": parsed_user_id,
-            "session_id": {"$exists": True}
-        }).sort("last_active", -1))
-        for s in sessions:
-            s["_id"] = str(s["_id"])
-            if isinstance(s.get("user_id"), ObjectId):
-                s["user_id"] = str(s["user_id"])
-            if "created_at" in s and s["created_at"]:
-                s["created_at"] = s["created_at"].isoformat()
-            if "last_active" in s and s["last_active"]:
-                s["last_active"] = s["last_active"].isoformat()
-        return {"sessions": sessions}
+        # Build flexible user filter matching both ObjectId and string formats
+        conditions = [{"user_id": parsed_user_id}]
+        if isinstance(parsed_user_id, ObjectId):
+            conditions.append({"user_id": str(parsed_user_id)})
+        else:
+            try:
+                conditions.append({"user_id": ObjectId(parsed_user_id)})
+            except Exception:
+                pass
+
+        merged_sessions = {}
+
+        # 1. Fetch from sessions_col
+        try:
+            sessions = list(sessions_col().find({
+                "$or": conditions,
+                "session_id": {"$exists": True}
+            }).sort("last_active", -1))
+            for s in sessions:
+                s_id = s.get("session_id")
+                if not s_id:
+                    continue
+                created_at_dt = s.get("created_at")
+                last_active_dt = s.get("last_active") or created_at_dt
+                created_at_str = created_at_dt.isoformat() if created_at_dt else None
+                last_active_str = last_active_dt.isoformat() if last_active_dt else None
+                
+                merged_sessions[s_id] = {
+                    "session_id": s_id,
+                    "title": s.get("title", "Untitled Chat"),
+                    "last_active": last_active_str or created_at_str or datetime.now(timezone.utc).isoformat(),
+                    "created_at": created_at_str or last_active_str
+                }
+        except Exception as e:
+            logger.warning("Error fetching from sessions_col: %s", e)
+
+        # 2. Fetch from chat_history_col
+        try:
+            # We filter for documents that have a response field or belong to a chat agent,
+            # ensuring telemetry/activity-only entries like soil analyses or irrigation reports aren't listed as chat history.
+            chat_docs = list(chat_history_col().find({
+                "$or": conditions,
+                "response": {"$exists": True, "$ne": None}
+            }).sort("created_at", -1))
+            
+            for doc in chat_docs:
+                s_id = str(doc["_id"])
+                
+                # Skip if already represented by a multi-turn session
+                doc_session_id = doc.get("session_id")
+                if doc_session_id and doc_session_id in merged_sessions:
+                    continue
+                
+                # Check for duplicate session based on title and time similarity (for legacy entries)
+                created_at_dt = doc.get("created_at")
+                if created_at_dt:
+                    if created_at_dt.tzinfo is None:
+                        created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
+                    is_dup = False
+                    for s in list(merged_sessions.values()):
+                        s_time_str = s.get("created_at") or s.get("last_active")
+                        if s_time_str:
+                            try:
+                                s_time = datetime.fromisoformat(s_time_str.replace("Z", "+00:00"))
+                                if s_time.tzinfo is None:
+                                    s_time = s_time.replace(tzinfo=timezone.utc)
+                                if abs((created_at_dt - s_time).total_seconds()) < 10 and s["title"] == doc.get("query"):
+                                    is_dup = True
+                                    break
+                            except Exception:
+                                pass
+                    if is_dup:
+                        continue
+
+                created_at_str = created_at_dt.isoformat() if created_at_dt else datetime.now(timezone.utc).isoformat()
+                merged_sessions[s_id] = {
+                    "session_id": s_id,
+                    "title": doc.get("query", "Untitled Chat"),
+                    "last_active": created_at_str,
+                    "created_at": created_at_str
+                }
+        except Exception as e:
+            logger.warning("Error fetching from chat_history_col: %s", e)
+
+        def parse_iso(dt_str):
+            try:
+                clean_str = dt_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_str)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except Exception:
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+        sorted_sessions = sorted(
+            merged_sessions.values(),
+            key=lambda s: parse_iso(s["last_active"]),
+            reverse=True
+        )
+
+        return {"sessions": sorted_sessions}
     except Exception as exc:
         logger.error("Failed to list sessions: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -114,6 +202,57 @@ async def list_session_messages(session_id: str, authorization: str = Header(def
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     try:
+        # Check if session_id is a valid ObjectId and exists in chat_history
+        is_object_id = False
+        try:
+            obj_id = ObjectId(session_id)
+            is_object_id = True
+        except Exception:
+            pass
+
+        if is_object_id:
+            chat_doc = chat_history_col().find_one({"_id": obj_id})
+            if chat_doc:
+                doc_user_id = str(chat_doc.get("user_id"))
+                if doc_user_id != str(user_id):
+                    raise HTTPException(status_code=403, detail="Not authorized to access this session")
+
+                created_at_dt = chat_doc.get("created_at")
+                created_at_str = created_at_dt.isoformat() if created_at_dt else datetime.now(timezone.utc).isoformat()
+                assistant_dt_str = (created_at_dt + timedelta(seconds=1)).isoformat() if created_at_dt else created_at_str
+
+                user_msg = {
+                    "_id": f"{session_id}_user",
+                    "session_id": session_id,
+                    "role": "user",
+                    "text": chat_doc.get("query", ""),
+                    "english_text": chat_doc.get("query", ""),
+                    "detected_language": chat_doc.get("detected_language"),
+                    "language_name": chat_doc.get("language_name"),
+                    "agent_type": None,
+                    "sources": [],
+                    "created_at": created_at_str,
+                    "image_base64": chat_doc.get("image_base64"),
+                    "file_base64": chat_doc.get("file_base64"),
+                    "file_name": chat_doc.get("file_name"),
+                }
+                
+                assistant_msg = {
+                    "_id": f"{session_id}_assistant",
+                    "session_id": session_id,
+                    "role": "assistant",
+                    "text": chat_doc.get("response", ""),
+                    "english_text": chat_doc.get("response", ""),
+                    "detected_language": chat_doc.get("detected_language"),
+                    "language_name": chat_doc.get("language_name"),
+                    "agent_type": chat_doc.get("agent"),
+                    "sources": chat_doc.get("sources", []),
+                    "created_at": assistant_dt_str,
+                }
+                
+                return {"messages": [user_msg, assistant_msg]}
+
+        # Fallback to standard sessions/messages collections
         session = sessions_col().find_one({"session_id": session_id})
         if not session:
             return {"messages": []}
@@ -259,6 +398,7 @@ async def chat(req: ChatRequest, authorization: str = Header(default="")):
             # 4. Insert legacy chat history document for dashboard compatibility
             chat_history_col().insert_one({
                 "user_id": parsed_user_id,
+                "session_id": session_id,
                 "agent": result.agent_type,
                 "query": req.message,
                 "response": result.response,

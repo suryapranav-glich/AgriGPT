@@ -209,7 +209,7 @@ async def get_voice_history(authorization: str = Header(default="")):
             {"user_id": parsed_uid},
             {"user_id": user_id}
         ]
-    }).sort("timestamp", -1).limit(10)
+    }).sort("timestamp", -1)
     
     history = []
     for doc in docs:

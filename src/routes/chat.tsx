@@ -6,6 +6,7 @@ import { ChatInput } from "../components/chat/ChatInput";
 import { LanguageSelector } from "../components/ui/LanguageSelector";
 import { AgentPill, type AgentType } from "../components/ui/AgentPill";
 import { useTranslation } from "../contexts/LanguageContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export const Route = createFileRoute("/chat")({ component: ChatPage });
 
@@ -146,6 +147,7 @@ interface DBResultSession {
 
 function ChatPage() {
   const { t, lang, setLang } = useTranslation();
+  const { user } = useAuth();
   const [listening, setListening] = useState(false);
   const [messages, setMessages] = useState<Msg[]>(() => [
     {
@@ -241,10 +243,11 @@ function ChatPage() {
     setCurrentAgent("general");
   };
 
-  // Load chat sessions history list on mount
+  // Load chat sessions history list on user change
   useEffect(() => {
     fetchSessions();
-  }, []);
+    startNewChat();
+  }, [user]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -488,7 +491,7 @@ function ChatPage() {
           </div>
 
           <div className="px-6 pb-6 max-w-3xl mx-auto w-full shrink-0">
-            <ChatInput onSend={send} listening={listening} onMic={startVoiceInput} />
+            <ChatInput onSend={send} />
           </div>
         </main>
       </div>
