@@ -1,6 +1,6 @@
 # =============================================================================
 # AgriGPT — Government Schemes Q&A
-# schemes/router.py  (Fixed v3)
+# schemes/router.py  (Updated — Groq error handling)
 # =============================================================================
 
 import json
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 class SchemeAskRequest(BaseModel):
     question: str  = Field(..., min_length=3, max_length=500)
-    state   : Optional[str]                    = Field(None, max_length=60)
-    language: Optional[Literal["en","hi","te"]]= Field("en")
+    state   : Optional[str]                     = Field(None, max_length=60)
+    language: Optional[Literal["en","hi","te"]] = Field("en")
 
 
 @router.post("/ask")
@@ -35,8 +35,6 @@ async def schemes_ask(
     try:
         from schemes.rag_engine import ask
 
-        # Run sync Gemini call in a thread (never blocks the event loop)
-        # asyncio.wait_for gives us a hard 30s timeout
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 ask,
@@ -62,10 +60,17 @@ async def schemes_ask(
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         err = str(e)
-        if "RESOURCE_EXHAUSTED" in err or "429" in err or "quota" in err.lower():
+        # Groq rate limit errors
+        if "rate_limit_exceeded" in err or "429" in err or "quota" in err.lower():
             raise HTTPException(
                 status_code=429,
-                detail="Gemini API quota exceeded. Please try again in a few minutes.",
+                detail="Groq API rate limit exceeded. Please try again in a minute.",
+            )
+        # Groq auth errors
+        if "invalid_api_key" in err or "401" in err or "authentication" in err.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="Invalid GROQ_API_KEY. Please check your Render environment variables.",
             )
         logger.error("Schemes ask error: %s", err)
         raise HTTPException(status_code=500, detail=f"Error: {err}")
@@ -112,4 +117,5 @@ async def schemes_health():
         "status" : "healthy" if re._llm is not None else "not_loaded",
         "model"  : re.LLM_MODEL,
         "loaded" : re._engine_loaded,
+        "provider": "Groq",
     }

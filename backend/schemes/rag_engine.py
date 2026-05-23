@@ -1,10 +1,12 @@
 # =============================================================================
 # AgriGPT — Government Schemes Q&A
-# schemes/rag_engine.py  (Fixed v4)
+# schemes/rag_engine.py  (Fixed v5 — Groq / llama-3.1-8b-instant)
 #
-# FIXES from v3:
-#   - Updated model to gemini-2.5-flash-preview-05-20
-#   - Robust JSON extraction (handles thinking tags, preamble, trailing text)
+# CHANGES from v4:
+#   - Replaced Gemini with Groq (llama-3.1-8b-instant)
+#   - Uses openai-compatible Groq client (pip install groq)
+#   - Same robust JSON extraction logic retained
+#   - Free tier: 14,400 req/day, no credit card needed
 # =============================================================================
 
 import os
@@ -12,11 +14,10 @@ import re
 import json
 import textwrap
 import logging
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-LLM_MODEL = "gemini-2.5-flash-preview-04-17"
+LLM_MODEL = "llama-3.1-8b-instant"
 
 _llm           = None
 _vector_db     = "none"
@@ -107,7 +108,7 @@ def _get_prompt(language: str, context: str, question: str) -> str:
 # STARTUP
 # =============================================================================
 def load_schemes_engine():
-    """Initialise Gemini only. No embedder. No FAISS. No OOM."""
+    """Initialise Groq client. No embedder. No FAISS. No OOM."""
     global _llm, _vector_db, _engine_loaded
 
     if _engine_loaded:
@@ -115,22 +116,16 @@ def load_schemes_engine():
 
     _vector_db = "none"
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         raise EnvironmentError(
-            "GEMINI_API_KEY is not set in Render Environment Variables."
+            "GROQ_API_KEY is not set in Render Environment Variables. "
+            "Get a free key at console.groq.com"
         )
 
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    _llm = genai.GenerativeModel(
-        LLM_MODEL,
-        generation_config=genai.types.GenerationConfig(
-            max_output_tokens=800,
-            temperature=0.1,
-        )
-    )
-    logger.info("[Schemes RAG] Gemini ready: %s", LLM_MODEL)
+    from groq import Groq
+    _llm = Groq(api_key=api_key)
+    logger.info("[Schemes RAG] Groq ready: %s", LLM_MODEL)
     _engine_loaded = True
 
 
@@ -167,29 +162,26 @@ def _static_context(question: str, state: str, language: str) -> str:
 # =============================================================================
 def _extract_json(raw: str) -> dict:
     """
-    Robustly extract a JSON object from Gemini output.
-    Handles: thinking tags, markdown fences, preamble text, trailing text.
+    Robustly extract a JSON object from LLM output.
+    Handles: markdown fences, preamble text, trailing text.
     """
-    # 1. Strip <thinking>...</thinking> blocks (Gemini 2.5 thinking output)
-    raw = re.sub(r"<thinking>.*?</thinking>", "", raw, flags=re.DOTALL)
-
-    # 2. Strip markdown fences
+    # 1. Strip markdown fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
     raw = re.sub(r"\s*```$", "", raw)
     raw = raw.strip()
 
-    # 3. Try direct parse first (clean output)
+    # 2. Try direct parse first (clean output)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
 
-    # 4. Extract the first {...} JSON object (handles preamble/trailing text)
+    # 3. Extract the first {...} JSON object (handles preamble/trailing text)
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         return json.loads(match.group(0))
 
-    # 5. Nothing worked — raise so router returns 500
+    # 4. Nothing worked — raise so router returns 500
     raise json.JSONDecodeError("No valid JSON object found in response", raw, 0)
 
 
@@ -222,10 +214,24 @@ def ask(
 
     prompt = _get_prompt(language, context, enriched_q)
 
-    # Call Gemini (sync — safe because router uses asyncio.to_thread)
-    import google.generativeai as genai
-    response = _llm.generate_content(prompt)
-    raw      = response.text.strip()
+    # Call Groq (sync — safe because router uses asyncio.to_thread)
+    chat_completion = _llm.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful agricultural schemes assistant for Indian farmers. "
+                    "Always respond with only a valid JSON object. No markdown, no extra text."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.1,
+        max_tokens=800,
+    )
+
+    raw = chat_completion.choices[0].message.content.strip()
 
     # Robust JSON extraction
     result = _extract_json(raw)
