@@ -7,10 +7,12 @@ Supported languages: English (en) | Hindi (hi) | Telugu (te)
 
 Free API key for live mandi prices:  https://data.gov.in/user/register
 
-Improvements in this version
+Changes in this version
+  ✅  groq_model upgraded to llama-3.3-70b-versatile
   ✅  top_k_chunks reduced to 4 (less noise, better precision)
   ✅  Chunk metadata schema defined (crop / category / language / season)
-  ✅  BASE_SYSTEM_PROMPT + thin language wrappers (single source of truth)
+  ✅  BASE_SYSTEM_PROMPT strengthened with CRITICAL LIVE-DATA priority rules
+  ✅  INTENT_CATEGORY system added (yield, fertilizer, irrigation, spraying …)
   ✅  Conversation memory dataclass + helpers
 ─────────────────────────────────────────────────────────────────────────────
 """
@@ -43,16 +45,107 @@ LANGUAGE_MAP: dict[str, str] = {
     "ur": "Urdu",
 }
 
-# Languages with full system prompt + UI string support
 SUPPORTED_LANGUAGES: list[str] = ["en", "hi", "te"]
 
 LangCode = Literal["en", "hi", "te"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# INTENT CATEGORIES
+#
+# Used by detect_intent() in farming_agent.py to:
+#   1. Decide which live data feeds to inject (weather only for relevant intents)
+#   2. Filter RAG retrieval to matching chunk categories
+#   3. Route to the right agent type
+#
+# INTENT → CHUNK CATEGORIES that should be retrieved
+# INTENT → whether live weather should be injected
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Intents for which live weather MUST be injected into the prompt
+WEATHER_RELEVANT_INTENTS: frozenset[str] = frozenset({
+    "weather",
+    "disease",
+    "spraying",
+    "fertilizer",
+    "irrigation",
+})
+
+# Mapping: intent → list of chunk categories to prioritise in RAG retrieval
+INTENT_TO_CHUNK_CATEGORIES: dict[str, list[str]] = {
+    "weather":    ["weather", "general"],
+    "disease":    ["disease", "general"],
+    "spraying":   ["disease", "fertilizer", "weather", "general"],
+    "fertilizer": ["fertilizer", "soil", "general"],
+    "irrigation": ["irrigation", "weather", "general"],
+    "market":     ["market"],
+    "yield":      ["seed", "general"],          # yield/estimation queries
+    "soil":       ["soil", "fertilizer", "general"],
+    "seed":       ["seed", "general"],
+    "scheme":     ["scheme", "market"],
+    "general":    ["general", "seed", "fertilizer"],
+}
+
+# Keyword sets for intent detection — used in farming_agent.detect_intent()
+INTENT_KEYWORDS: dict[str, frozenset[str]] = {
+    "weather": frozenset({
+        "weather", "temperature", "forecast", "rain", "rainfall", "humidity",
+        "sunny", "climate", "wind", "storm", "monsoon", "cloud", "hot", "cold",
+    }),
+    "disease": frozenset({
+        "disease", "pest", "insect", "fungal", "virus", "blight", "blast",
+        "rot", "mold", "mould", "rust", "wilt", "spot", "spots", "lesion",
+        "yellowing", "browning", "holes", "larvae", "larva", "caterpillar",
+        "aphid", "thrip", "whitefly", "hopper", "bollworm", "symptom",
+        "infected", "infection", "attack", "damage", "yellow", "leaves",
+    }),
+    "spraying": frozenset({
+        "spray", "spraying", "pesticide", "insecticide", "fungicide",
+        "herbicide", "weedicide", "chemical", "neem", "dose", "ml",
+        "spray today", "when spray", "can spray",
+    }),
+    "fertilizer": frozenset({
+        "fertilizer", "fertilizers", "urea", "dap", "npk", "nitrogen",
+        "phosphorus", "potassium", "potash", "manure", "compost",
+        "vermicompost", "fym", "micronutrient", "zinc", "boron", "dose",
+        "how much urea", "how much dap", "basal", "topdress",
+    }),
+    "irrigation": frozenset({
+        "irrigation", "irrigate", "watering", "water", "drip", "sprinkler",
+        "flood", "furrow", "moisture", "drought", "stress", "when water",
+        "how much water",
+    }),
+    "market": frozenset({
+        "price", "prices", "rate", "rates", "cost", "msp", "market", "mandi",
+        "quintal", "sell", "selling", "buy", "buying", "rupee", "₹",
+        "worth", "value", "profit", "income", "earn", "today price",
+        "current price", "latest price", "how much",
+    }),
+    "yield": frozenset({
+        "yield", "production", "harvest", "output", "ton", "tonnes", "kg",
+        "per acre", "per hectare", "estimation", "estimate", "expected",
+        "how much produce", "productivity",
+    }),
+    "soil": frozenset({
+        "soil", "ph", "acidic", "alkaline", "saline", "organic", "carbon",
+        "texture", "clay", "sandy", "loam", "black soil", "red soil",
+        "soil test", "soil health",
+    }),
+    "seed": frozenset({
+        "seed", "seeds", "variety", "hybrid", "sowing", "nursery",
+        "seedling", "transplant", "germination", "spacing", "seed rate",
+        "which variety", "best variety", "when sow", "sow",
+    }),
+    "scheme": frozenset({
+        "scheme", "subsidy", "loan", "kcc", "kisan", "pm-kisan", "pmkisan",
+        "rythu", "bandhu", "bima", "credit", "pmksy", "pmfby", "insurance",
+        "enam", "government", "free", "apply",
+    }),
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MSP 2024-25 RATES  (CACP official)
-# Key   = lowercase crop name used internally
-# Value = {grade_label: price_per_quintal}  ("" = single-grade crop)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _MSP_RATES: dict[str, dict[str, int]] = {
@@ -81,7 +174,6 @@ _MSP_RATES: dict[str, dict[str, int]] = {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AGMARKNET COMMODITY MAP
-# Key = internal crop key  →  Value = exact commodity string in AgMarkNet API
 # ─────────────────────────────────────────────────────────────────────────────
 
 _AGMARKNET_CROP_MAP: dict[str, str] = {
@@ -116,64 +208,32 @@ _AGMARKNET_CROP_MAP: dict[str, str] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ✅ FIX 2 — CHUNK METADATA SCHEMA
-#
-# Every document chunk stored in the vector DB must carry this metadata.
-# Use it in your retriever to filter BEFORE semantic search, e.g.:
-#
-#   results = vectordb.query(
-#       query_embeddings=[query_vec],
-#       n_results=settings.top_k_chunks,           # now 4
-#       where={                                     # metadata pre-filter
-#           "crop":     detected_crop,              # "paddy"
-#           "language": user_lang,                  # "te"
-#           "season":   current_season(),           # "kharif"
-#       },
-#   )
-#
-# This replaces brute-force top-k with precision retrieval.
+# CHUNK METADATA SCHEMA
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Allowed values for each metadata field  (use these as enums in your ingestion
-# pipeline so you never store a typo that silently breaks filtering)
-
 CHUNK_CATEGORIES = Literal[
-    "disease",       # pest / pathogen identification & treatment
-    "fertilizer",    # nutrient management, doses, schedules
-    "irrigation",    # water management, scheduling
-    "market",        # mandi prices, MSP, selling advice
-    "weather",       # climate advisory, spray windows
-    "soil",          # soil health, testing, amendments
-    "seed",          # variety selection, sowing
-    "scheme",        # govt schemes, subsidies, insurance
-    "general",       # catch-all
+    "disease",
+    "fertilizer",
+    "irrigation",
+    "market",
+    "weather",
+    "soil",
+    "seed",
+    "scheme",
+    "general",
 ]
 
 CHUNK_SEASONS = Literal["kharif", "rabi", "zaid", "perennial", "all"]
 
+
 @dataclass
 class ChunkMetadata:
-    """
-    Attach one of these to every chunk at ingestion time.
-
-    Example
-    -------
-    meta = ChunkMetadata(
-        crop="paddy",
-        category="disease",
-        language="te",
-        season="kharif",
-        source="icar_paddy_2024.pdf",
-        page=12,
-    )
-    vectordb.add(documents=[chunk_text], metadatas=[meta.to_dict()], ids=[chunk_id])
-    """
-    crop:     str   = "all"        # lowercase internal key, e.g. "paddy"
-    category: str   = "general"    # one of CHUNK_CATEGORIES
-    language: str   = "en"         # "en" | "hi" | "te" | "all"
-    season:   str   = "all"        # one of CHUNK_SEASONS
-    source:   str   = ""           # file name or URL
-    page:     int   = 0            # page number (0 = unknown)
+    crop:     str = "all"
+    category: str = "general"
+    language: str = "en"
+    season:   str = "all"
+    source:   str = ""
+    page:     int = 0
 
     def to_dict(self) -> dict[str, str | int]:
         return {
@@ -187,24 +247,15 @@ class ChunkMetadata:
 
     @staticmethod
     def build_filter(
-        crop: str | None     = None,
+        crop:     str | None = None,
         category: str | None = None,
         language: str | None = None,
-        season: str | None   = None,
+        season:   str | None = None,
     ) -> dict:
-        """
-        Build a ChromaDB-compatible `where` filter dict.
-        Only adds keys that are explicitly provided.
-
-        Usage in retriever
-        ------------------
-        where = ChunkMetadata.build_filter(crop="paddy", language="te")
-        results = collection.query(query_embeddings=[q], n_results=4, where=where)
-        """
         f: dict = {}
         if crop:     f["crop"]     = crop
         if category: f["category"] = category
-        if language and language != "en":   # en chunks used as fallback always
+        if language and language != "en":
             f["language"] = {"$in": [language, "all"]}
         if season and season != "all":
             f["season"] = {"$in": [season, "all"]}
@@ -212,16 +263,37 @@ class ChunkMetadata:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ✅ FIX 3 — BASE SYSTEM PROMPT + THIN LANGUAGE WRAPPERS
+# SYSTEM PROMPT — BASE RULES + LANGUAGE WRAPPERS
 #
-# One source of truth. Rules change in ONE place only.
-# Language wrappers add only:  identity name + response-language instruction.
+# ✅ FIX 2: CRITICAL LIVE-DATA PRIORITY RULES added as the first block.
+#           These override any knowledge-base values for prices / MSP.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BASE_RULES: str = """\
+═══════════════════════════════════════════════════════
+CRITICAL RULES — KNOWLEDGE PRIORITY  (read first, always)
+═══════════════════════════════════════════════════════
+1. LIVE DATA ALWAYS WINS.
+   If REAL-TIME MANDI PRICES or REAL-TIME WEATHER are provided in this
+   prompt, they are the ONLY source of truth for prices and weather.
+   The knowledge base may contain MSP or price figures — IGNORE THEM
+   completely if live data is present. Never mix old and new values.
+
+2. NEVER USE OUTDATED MSP.
+   The knowledge base contains MSP values for reference only.
+   If live mandi prices are given, use those exact ₹ figures.
+   If only MSP is available (no live feed), state clearly:
+   "This is the government MSP — actual mandi price may differ."
+
+3. NO PRICE MIXING.
+   Never combine a live price from one source with an MSP from the
+   knowledge base in the same sentence as if they are comparable.
+   State each figure's source and date explicitly.
+═══════════════════════════════════════════════════════
+
 YOUR JOB:
-Use the REAL-TIME DATA (live mandi prices, live weather) and REFERENCE KNOWLEDGE \
-provided to answer the farmer's question with exact numbers.
+Use the REAL-TIME DATA (live mandi prices, live weather) and REFERENCE
+KNOWLEDGE provided to answer the farmer's question with exact numbers.
 
 PRICES:
 - Use ONLY the live mandi figures given. Never guess or substitute.
@@ -231,6 +303,8 @@ PRICES:
 - Never give vague ranges — use exact ₹ figures.
 
 WEATHER:
+- Weather data is injected ONLY when relevant to the query (spraying,
+  irrigation, disease management, or explicit weather questions).
 - Rain ≥ 60 %: advise against spraying today.
 - Wind ≥ 25 km/h: warn against foliar sprays.
 - UV ≥ 8 or temp ≥ 40 °C: recommend early-morning or evening operations.
@@ -245,7 +319,6 @@ GENERAL:
 - Synthesise — do NOT copy-paste reference text verbatim.\
 """
 
-# Language wrappers — identity + response-language instruction only
 _LANG_WRAPPERS: dict[str, str] = {
     "en": (
         "You are KrishiMitra, a knowledgeable and friendly AI agricultural advisor "
@@ -265,13 +338,11 @@ _LANG_WRAPPERS: dict[str, str] = {
     ),
 }
 
+
 def get_system_prompt(lang: str) -> str:
     """
     Compose the system prompt for *lang* by injecting _BASE_RULES
     into the thin language wrapper.  Falls back to English.
-
-    >>> get_system_prompt("te")          # Telugu prompt, ~30 lines
-    >>> get_system_prompt("xx")          # falls back to English
     """
     wrapper = _LANG_WRAPPERS.get(lang, _LANG_WRAPPERS["en"])
     return wrapper.format(rules=_BASE_RULES)
@@ -302,7 +373,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "mandi_unavailable":  (
             "⚠ Live mandi data is temporarily unavailable. "
-            "Showing Govt MSP as reference."
+            "Showing Govt MSP as reference only — actual mandi price may differ."
         ),
         "mandi_check":        "For today's live rates: agmarknet.gov.in → Commodity Prices",
         "greeting":           (
@@ -337,7 +408,8 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "सरकार कानूनी रूप से MSP की गारंटी देती है।"
         ),
         "mandi_unavailable":  (
-            "⚠ लाइव मंडी डेटा अभी उपलब्ध नहीं है। सरकारी MSP संदर्भ के रूप में दिखाया जा रहा है।"
+            "⚠ लाइव मंडी डेटा अभी उपलब्ध नहीं है। "
+            "सरकारी MSP केवल संदर्भ के रूप में दिखाया जा रहा है — वास्तविक मंडी भाव अलग हो सकता है।"
         ),
         "mandi_check":        "आज के लाइव भाव: agmarknet.gov.in → Commodity Prices",
         "greeting":           (
@@ -373,7 +445,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "mandi_unavailable":  (
             "⚠ లైవ్ మండి డేటా తాత్కాలికంగా అందుబాటులో లేదు. "
-            "ప్రభుత్వ MSPని సూచనగా చూపిస్తున్నాం."
+            "ప్రభుత్వ MSPని సూచనగా మాత్రమే చూపిస్తున్నాం — వాస్తవ మండి ధర వేరుగా ఉండవచ్చు."
         ),
         "mandi_check":        "ఈరోజు లైవ్ ధరల కోసం: agmarknet.gov.in → Commodity Prices",
         "greeting":           (
@@ -401,31 +473,11 @@ def get_message(lang: str, key: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ✅ FIX 4 — CONVERSATION MEMORY
-#
-# ConversationMemory keeps a sliding window of recent turns + a running
-# summary of key farming facts (crop, location, problem, decisions).
-#
-# Usage in farming_agent.py
-# ─────────────────────────────────────────────────────────────────────────────
-#
-#   memory = ConversationMemory(lang="te")
-#
-#   # On each user turn:
-#   memory.add_turn("user", user_text)
-#   context = memory.build_context()         # inject into LLM system prompt
-#
-#   # On each assistant turn:
-#   memory.add_turn("assistant", reply_text)
-#
-#   # After every N turns, compress:
-#   if memory.should_summarise():
-#       summary = llm.call(memory.summary_prompt())
-#       memory.apply_summary(summary)
-#
+# CONVERSATION MEMORY
 # ─────────────────────────────────────────────────────────────────────────────
 
 Role = Literal["user", "assistant"]
+
 
 @dataclass
 class Turn:
@@ -434,89 +486,51 @@ class Turn:
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     def to_llm_message(self) -> dict[str, str]:
-        """Convert to the OpenAI-style message dict expected by the LLM."""
         return {"role": self.role, "content": self.content}
 
 
 @dataclass
 class ConversationMemory:
-    """
-    Sliding-window conversation memory with periodic summarisation.
-
-    Parameters
-    ----------
-    lang            Language code — controls header / summary prompt language.
-    max_turns       Maximum raw turns to keep before triggering summarisation.
-    summarise_every Summarise after this many NEW turns since last summary.
-    """
     lang:            str = "en"
     max_turns:       int = 10
     summarise_every: int = 6
 
-    _turns:          list[Turn] = field(default_factory=list, init=False)
-    _summary:        str        = field(default="", init=False)
-    _turns_since_summary: int   = field(default=0, init=False)
+    _turns:               list[Turn] = field(default_factory=list, init=False)
+    _summary:             str        = field(default="", init=False)
+    _turns_since_summary: int        = field(default=0, init=False)
 
-    # ── Detected session context (populated by the agent as it runs) ──────────
     detected_crop:     str | None = field(default=None, init=False)
     detected_location: str | None = field(default=None, init=False)
     detected_season:   str | None = field(default=None, init=False)
 
     def add_turn(self, role: Role, content: str) -> None:
-        """Append a new turn and trim to max_turns."""
         self._turns.append(Turn(role=role, content=content))
         self._turns_since_summary += 1
-        # Keep only the most recent max_turns
         if len(self._turns) > self.max_turns:
-            self._turns = self._turns[-self.max_turns :]
+            self._turns = self._turns[-self.max_turns:]
 
     def should_summarise(self) -> bool:
-        """True when it is time to compress the conversation."""
         return self._turns_since_summary >= self.summarise_every
 
     def summary_prompt(self) -> str:
-        """Return the prompt that asks the LLM to produce a new summary."""
         return get_message(self.lang, "memory_summary_prompt")
 
     def apply_summary(self, summary_text: str) -> None:
-        """Replace the running summary and reset the counter."""
         self._summary = summary_text
         self._turns_since_summary = 0
-        # Keep only the last 2 raw turns after summarisation
         self._turns = self._turns[-2:]
 
     def build_context(self) -> str:
-        """
-        Produce the memory block to prepend to the system prompt.
-
-        Format injected into every LLM call:
-
-            CONVERSATION SO FAR:
-            [Summary if available]
-
-            user: <last message>
-            assistant: <last reply>
-            ...
-        """
         parts: list[str] = []
         header = get_message(self.lang, "memory_context_header")
         parts.append(header)
-
         if self._summary:
             parts.append(f"Summary: {self._summary}\n")
-
         for turn in self._turns:
             parts.append(f"{turn.role}: {turn.content}")
-
         return "\n".join(parts)
 
     def to_llm_messages(self) -> list[dict[str, str]]:
-        """
-        Return the conversation as a list of OpenAI-style message dicts.
-        Prepend the summary as a system message if one exists.
-
-        Use this when your LLM client accepts a `messages` array directly.
-        """
         messages: list[dict[str, str]] = []
         if self._summary:
             messages.append({
@@ -539,7 +553,7 @@ class ConversationMemory:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SETTINGS  (Pydantic BaseSettings — all values overridable via .env)
+# SETTINGS
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Settings(BaseSettings):
@@ -553,28 +567,28 @@ class Settings(BaseSettings):
 
     # ── LLM ───────────────────────────────────────────────────────────────────
     groq_api_key:    str   = ""
-    groq_model:      str   = "llama-3.1-8b-instant"
+    groq_model:      str   = "llama-3.3-70b-versatile"   # ✅ upgraded model
     gemini_api_key:  str   = ""
     gemini_model:    str   = "gemini-2.0-flash"
     llm_temperature: float = 0.3
 
     # ── Live data ─────────────────────────────────────────────────────────────
-    data_gov_api_key:    str   = ""   # https://data.gov.in/user/register
+    data_gov_api_key:    str   = ""
     agmarknet_base_url:  str   = (
         "https://api.data.gov.in/resource/"
         "9ef84268-d588-465a-a308-a864a43d0070"
     )
     api_timeout_seconds: float = 9.0
 
-    # ── Default location (used when geocoding fails) ───────────────────────────
+    # ── Default location ──────────────────────────────────────────────────────
     default_lat:           float = 17.385
     default_lon:           float = 78.4867
     default_location_name: str   = "Hyderabad, Telangana"
 
-    # ── Default language ───────────────────────────────────────────────────────
-    default_language: str = "en"   # "en" | "hi" | "te"
+    # ── Default language ──────────────────────────────────────────────────────
+    default_language: str = "en"
 
-    # ── Weather thresholds for auto-advisories ────────────────────────────────
+    # ── Weather thresholds ────────────────────────────────────────────────────
     rain_spray_block_pct:   float = 60.0
     rain_spray_caution_pct: float = 40.0
     wind_spray_block_kmh:   float = 25.0
@@ -582,12 +596,12 @@ class Settings(BaseSettings):
     heat_stress_temp_c:     float = 40.0
 
     # ── RAG / retrieval ───────────────────────────────────────────────────────
-    top_k_chunks:        int = 4      # ✅ reduced from 6 → less noise, better precision
+    top_k_chunks:        int = 4
     max_response_tokens: int = 1024
 
     # ── Conversation memory ───────────────────────────────────────────────────
-    memory_max_turns:       int = 10  # raw turns kept in sliding window
-    memory_summarise_every: int = 6   # compress after N new turns
+    memory_max_turns:       int = 10
+    memory_summarise_every: int = 6
 
     # ── MSP data ──────────────────────────────────────────────────────────────
     msp_rates:  dict = _MSP_RATES
@@ -606,20 +620,12 @@ class Settings(BaseSettings):
 
     # ── Convenience methods ───────────────────────────────────────────────────
     def message(self, lang: str, key: str) -> str:
-        """settings.message('te', 'greeting')"""
         return get_message(lang, key)
 
     def system_prompt(self, lang: str) -> str:
-        """settings.system_prompt('hi')"""
         return get_system_prompt(lang)
 
     def new_memory(self, lang: str | None = None) -> ConversationMemory:
-        """
-        Factory — creates a ConversationMemory wired to Settings values.
-
-        Usage:
-            memory = settings.new_memory(lang="te")
-        """
         return ConversationMemory(
             lang=lang or self.default_language,
             max_turns=self.memory_max_turns,

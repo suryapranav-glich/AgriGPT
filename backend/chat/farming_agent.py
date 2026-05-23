@@ -4,24 +4,35 @@ Architecture:
   GROQ   — text Q&A, market advice, general farming
   GEMINI — image / disease detection only
 
+Changes in this version
+  ✅ FIX 1 — Conditional weather injection: weather is fetched and injected
+             ONLY when the detected intent is in WEATHER_RELEVANT_INTENTS
+             (weather / disease / spraying / fertilizer / irrigation).
+  ✅ FIX 2 — Stronger system prompt with CRITICAL LIVE-DATA PRIORITY rules
+             (lives in config.py _BASE_RULES, applied here via settings).
+  ✅ FIX 3 — Intent-filtered RAG: retrieve() now receives the detected intent
+             so rag_pipeline can prioritise the correct chunk categories.
+             "yield estimation" → seed/general chunks only, NOT spray/weather.
+  ✅ FIX 4 — detect_intent() — replaces two coarse booleans (_is_weather_query,
+             _is_price_query) with a single, fine-grained intent classifier
+             covering: weather / disease / spraying / fertilizer / irrigation /
+             market / yield / soil / seed / scheme / general.
+
 Prompt sent to Groq every turn:
-  [SYSTEM PROMPT]            ← language-specific, from config
-  [CONVERSATION MEMORY]      ← ✅ NEW — sliding window + summary
+  [SYSTEM PROMPT]            ← language-specific, includes CRITICAL PRIORITY rules
+  [CONVERSATION MEMORY]      ← sliding window + summary
   [CNN DISEASE INFO]         ← only when image uploaded
-  [LIVE MANDI PRICES]        ← real-time AgMarkNet fetch
-  [LIVE WEATHER]             ← real-time Open-Meteo fetch
+  [LIVE MANDI PRICES]        ← only when intent is "market"
+  [LIVE WEATHER]             ← only when intent in WEATHER_RELEVANT_INTENTS
   [UPLOADED DOCUMENT]        ← only when file attached
-  [RAG KNOWLEDGE BASE]       ← background agronomy facts
+  [RAG KNOWLEDGE BASE]       ← intent-filtered agronomy facts
   [FARMER'S QUESTION]
 
 Memory lifecycle (per user session):
   • Caller creates one ConversationMemory via settings.new_memory(lang)
   • Passes it into every process_query() call for that session
   • Memory auto-summarises after settings.memory_summarise_every new turns
-  • Caller persists the memory object between requests (e.g. in session state)
-
-No Anthropic API is used anywhere in this file.
-All strings configurable via settings / .env — nothing hardcoded.
+  • Caller persists the memory object between requests (e.g. session state)
 ────────────────────────────────────────────────────────────────────────────
 """
 
@@ -37,7 +48,13 @@ from datetime import date, datetime
 import httpx
 from PIL import Image
 
-from chat.config import ConversationMemory, settings
+from chat.config import (
+    ConversationMemory,
+    INTENT_KEYWORDS,
+    INTENT_TO_CHUNK_CATEGORIES,
+    WEATHER_RELEVANT_INTENTS,
+    settings,
+)
 from chat.language_detector import detect_language
 from chat.translator import from_english, to_english
 from chat.rag_pipeline import format_context, get_agent_from_chunks, retrieve
@@ -70,21 +87,18 @@ def _get_groq_client():
 
 
 def _call_groq(
-    user_prompt:  str,
+    user_prompt:   str,
     system_prompt: str,
-    memory: ConversationMemory | None = None,
+    memory:        ConversationMemory | None = None,
 ) -> str:
     """
     Call Groq with a full message array.
 
-    Message order sent to the API:
+    Message order:
       1. system   — language-specific KrishiMitra system prompt
       2. system   — conversation memory summary (if one exists)
       3. …turns…  — recent raw turns from the sliding window
       4. user     — the assembled prompt for this turn
-
-    Using a second system message for the summary keeps it authoritative
-    without inflating the visible conversation history.
     """
     client = _get_groq_client()
     if client is None:
@@ -92,14 +106,11 @@ def _call_groq(
             memory.lang if memory else "en", "llm_unavailable"
         )
 
-    # Build message array
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_prompt}
     ]
 
-    # Inject memory
     if memory and memory.turn_count > 0:
-        # Summary goes in as a second system message — highest authority
         if memory._summary:
             messages.append({
                 "role":    "system",
@@ -108,10 +119,8 @@ def _call_groq(
                     + memory._summary
                 ),
             })
-        # Recent raw turns (already trimmed to max_turns inside ConversationMemory)
         messages.extend(memory.to_llm_messages())
 
-    # Current user prompt (with RAG / live data already embedded)
     messages.append({"role": "user", "content": user_prompt})
 
     try:
@@ -134,26 +143,19 @@ def _call_groq(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _maybe_summarise(memory: ConversationMemory, system_prompt: str) -> None:
-    """
-    If the memory window is due for compression, call Groq with the
-    summarisation prompt and apply the result back to the memory object.
-
-    This is called AFTER the assistant turn is stored, so the summary
-    captures the full exchange.
-    """
     if not memory.should_summarise():
         return
 
     summary_request = (
-        memory.summary_prompt()           # lang-specific instruction
+        memory.summary_prompt()
         + "\n\nConversation to summarise:\n"
-        + memory.build_context()          # full current window
+        + memory.build_context()
     )
 
     summary = _call_groq(
         user_prompt   = summary_request,
         system_prompt = system_prompt,
-        memory        = None,             # no memory for the meta-call
+        memory        = None,
     )
 
     memory.apply_summary(summary)
@@ -196,23 +198,16 @@ def _get_gemini_model():
 
 
 def _call_gemini_with_image(
-    prompt:    str,
-    pil_image: Image.Image,
-    memory:    ConversationMemory | None = None,
+    prompt:        str,
+    pil_image:     Image.Image,
+    memory:        ConversationMemory | None = None,
     system_prompt: str = "",
 ) -> str:
-    """
-    Call Gemini for image-based disease detection.
-    Falls back to Groq (text-only) if Gemini is unavailable.
-    Memory context is prepended to the prompt text since Gemini's
-    generativeai SDK does not accept a separate system-messages array.
-    """
     model = _get_gemini_model()
     if model is None:
         logger.warning("[Gemini] Unavailable — falling back to Groq (text-only).")
         return _call_groq(prompt, system_prompt, memory)
 
-    # Prepend memory context to the text prompt so Gemini has continuity
     full_prompt = prompt
     if memory and memory.turn_count > 0:
         ctx = memory.build_context()
@@ -239,8 +234,66 @@ class AgentResponse:
     sources:           list[str]
     english_query:     str
     english_response:  str
-    # Memory is returned so the caller can persist it between requests
     memory:            ConversationMemory | None = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ✅ FIX 4 — INTENT DETECTION
+#
+# Replaces the old coarse _is_weather_query() / _is_price_query() pair.
+# Returns one of:
+#   weather | disease | spraying | fertilizer | irrigation |
+#   market  | yield   | soil     | seed       | scheme     | general
+#
+# Logic:
+#   1. Tokenise query (lowercase words).
+#   2. Score each intent by counting keyword hits from INTENT_KEYWORDS.
+#   3. Return the intent with the highest score; tie-break = "general".
+#
+# Example mappings
+# ─────────────────
+#   "paddy price today"          → market
+#   "yellow leaves on rice"      → disease
+#   "yield estimation per acre"  → yield
+#   "how much urea for cotton"   → fertilizer
+#   "can I spray today"          → spraying
+#   "when to irrigate wheat"     → irrigation
+#   "PM-KISAN scheme apply"      → scheme
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _tokens(text: str) -> set[str]:
+    """Lowercase word tokens, punctuation stripped."""
+    return set(re.findall(r"\b\w+\b", text.lower()))
+
+
+def detect_intent(query: str) -> str:
+    """
+    Classify the farming query into a single intent string.
+
+    Parameters
+    ----------
+    query : English query text (translate before calling if needed).
+
+    Returns
+    -------
+    One of: weather / disease / spraying / fertilizer / irrigation /
+            market / yield / soil / seed / scheme / general
+    """
+    toks = _tokens(query)
+    scores: dict[str, int] = {}
+
+    for intent, keywords in INTENT_KEYWORDS.items():
+        hit = len(toks & keywords)
+        if hit > 0:
+            scores[intent] = hit
+
+    if not scores:
+        return "general"
+
+    # Return intent with highest keyword hit count
+    best = max(scores, key=lambda k: scores[k])
+    logger.debug("[Intent] '%s...' → %s (scores: %s)", query[:60], best, scores)
+    return best
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,7 +304,7 @@ async def _fetch_live_prices(crop_key: str, lang: str = "en") -> str:
     """
     Fetch real-time mandi arrivals from AgMarkNet (data.gov.in).
     Returns a formatted block for injection into the LLM prompt.
-    Falls back to MSP-only text when the API returns nothing.
+    Falls back to MSP-only text when the API returns nothing useful.
     """
     commodity = settings.agmarknet_crop_map.get(
         crop_key.lower(), crop_key.capitalize()
@@ -284,7 +337,7 @@ async def _fetch_live_prices(crop_key: str, lang: str = "en") -> str:
             "[Price] AgMarkNet request failed for '%s': %s", commodity, exc
         )
 
-    # Sort newest arrivals first
+    # Sort newest first
     if records:
         try:
             records.sort(
@@ -299,6 +352,7 @@ async def _fetch_live_prices(crop_key: str, lang: str = "en") -> str:
         lines = [
             f"LIVE MANDI PRICES — {commodity.upper()}",
             f"Source: AgMarkNet / data.gov.in  |  Fetched: {today_str}",
+            "(These are TODAY'S live figures — use these, not any knowledge-base prices)",
             "",
         ]
         seen: set[str] = set()
@@ -345,7 +399,6 @@ async def _fetch_live_prices(crop_key: str, lang: str = "en") -> str:
 
 
 def _msp_line(crop_key: str) -> str:
-    """Return a single formatted MSP string for crop_key, or empty string."""
     msp_data = settings.msp_rates.get(crop_key.lower(), {})
     if not msp_data:
         return ""
@@ -363,12 +416,11 @@ def _msp_line(crop_key: str) -> str:
 async def _fetch_weather(location: str) -> str:
     """
     Fetch a 3-day farming-relevant forecast from Open-Meteo.
-    Returns a formatted block for injection into the LLM prompt.
+    Only called when intent is in WEATHER_RELEVANT_INTENTS.
     """
     today_str  = date.today().strftime("%d %b %Y")
     clean_name = location.split(",")[0].strip()
 
-    # Geocode
     lat   = settings.default_lat
     lon   = settings.default_lon
     place = settings.default_location_name
@@ -388,7 +440,6 @@ async def _fetch_weather(location: str) -> str:
     except Exception as exc:
         logger.warning("[Weather] Geocoding failed for '%s': %s", location, exc)
 
-    # Forecast
     try:
         wx_url = (
             f"https://api.open-meteo.com/v1/forecast"
@@ -416,6 +467,7 @@ async def _fetch_weather(location: str) -> str:
             lines = [
                 f"LIVE WEATHER FORECAST — {place}",
                 f"Source: Open-Meteo  |  Fetched: {today_str}",
+                "(Use these exact conditions for today's field advice)",
                 "",
             ]
 
@@ -455,7 +507,6 @@ def _weather_advisories(
     uv:                 float | None,
     t_max:              float | None,
 ) -> list[str]:
-    """Return plain-text farming advisory strings derived from numeric weather."""
     out: list[str] = []
 
     if rain_prob is not None:
@@ -511,18 +562,18 @@ def _build_prompt(
     extracted_doc: str = "",
 ) -> str:
     """
-    Assemble the user-turn message sent to the LLM, in strict priority order:
+    Assemble the user-turn message sent to the LLM.
 
+    Priority order (highest → lowest):
       1. CNN disease classifier  — image-based, highest confidence
-      2. LIVE MANDI PRICES       — overrides any RAG price figures
-      3. LIVE WEATHER            — drives today's field decisions
+      2. LIVE MANDI PRICES       — injected only when intent == "market"
+      3. LIVE WEATHER            — injected only when intent in WEATHER_RELEVANT_INTENTS
       4. UPLOADED DOCUMENT       — farmer-provided file content
-      5. RAG KNOWLEDGE BASE      — background agronomy / scheme facts
-      6. FARMER'S QUESTION       — what to answer
+      5. RAG KNOWLEDGE BASE      — intent-filtered agronomy facts
+      6. FARMER'S QUESTION
 
-    NOTE: Conversation memory is NOT added here.
-    It is injected separately in _call_groq() as earlier messages in the
-    messages array, which is the correct place for it.
+    Conversation memory is NOT added here — it is injected in _call_groq()
+    as earlier messages in the messages array.
     """
     SEP = "━" * 50
     sections: list[str] = []
@@ -536,15 +587,17 @@ def _build_prompt(
     if live_prices:
         sections.append(
             f"{SEP}\nREAL-TIME MANDI PRICES\n{SEP}\n"
-            "IMPORTANT: Use ONLY these figures. Ignore any price numbers in "
-            "the knowledge base below — those may be outdated.\n\n"
+            "CRITICAL: Use ONLY these live ₹ figures. "
+            "The knowledge base may contain older MSP values — IGNORE THEM "
+            "completely now that live data is available.\n\n"
             + live_prices
         )
 
     if live_weather:
         sections.append(
             f"{SEP}\nREAL-TIME WEATHER FORECAST\n{SEP}\n"
-            "Use these exact conditions when giving today's field advice.\n\n"
+            "Use these exact conditions when giving today's field advice. "
+            "This data was fetched right now — it is current.\n\n"
             + live_weather
         )
 
@@ -556,8 +609,9 @@ def _build_prompt(
     if rag_context:
         sections.append(
             f"{SEP}\nBACKGROUND KNOWLEDGE BASE\n{SEP}\n"
-            "(Use for agronomy facts, doses, scheme details. "
-            "Live prices above take precedence over any price figures here.)\n\n"
+            "(Agronomy facts, doses, scheme details. "
+            "If live prices or weather appear above, those take full precedence "
+            "over any figures in this section.)\n\n"
             + rag_context
         )
 
@@ -574,21 +628,8 @@ def _build_prompt(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# QUERY CLASSIFIERS
+# REMAINING CLASSIFIERS  (kept for non-agri guard + greeting check)
 # ─────────────────────────────────────────────────────────────────────────────
-
-_WEATHER_KEYWORDS = frozenset({
-    "weather", "temperature", "forecast", "rain", "rainfall", "humidity",
-    "sunny", "climate", "wind", "storm", "monsoon", "cloud", "hot", "cold",
-    "spray today", "irrigate today",
-})
-
-_PRICE_KEYWORDS = frozenset({
-    "price", "prices", "rate", "rates", "cost", "msp", "market", "mandi",
-    "quintal", "sell", "selling", "buy", "buying", "rupee", "₹",
-    "worth", "value", "profit", "income", "earn",
-    "today price", "current price", "latest price", "how much",
-})
 
 _GREETING_KEYWORDS = frozenset({
     "hello", "hi", "hey", "namaste", "namaskar", "namaskaram",
@@ -623,6 +664,11 @@ _AGRI_KEYWORDS = frozenset({
     "apply", "application", "stage", "stages", "days", "week", "season",
 })
 
+_AGRI_SUBSTRINGS = (
+    "agri", "krishi", "rythu", "kisan", "mandi", "weather",
+    "irrigat", "fertiliz", "grow", "plant", "harvest", "spray", "crop",
+)
+
 # Ordered longest-first so "soybean" matches before "bean"
 _KNOWN_CROPS_ORDERED = [
     "soybean", "sunflower", "groundnut", "sugarcane", "cauliflower",
@@ -631,23 +677,6 @@ _KNOWN_CROPS_ORDERED = [
     "ragi", "tur", "arhar", "moong", "urad", "mustard",
     "banana", "mango", "brinjal", "cabbage",
 ]
-
-_AGRI_SUBSTRINGS = (
-    "agri", "krishi", "rythu", "kisan", "mandi", "weather",
-    "irrigat", "fertiliz", "grow", "plant", "harvest", "spray", "crop",
-)
-
-
-def _tokens(text: str) -> set[str]:
-    return set(re.findall(r"\b\w+\b", text.lower()))
-
-
-def _is_weather_query(query: str) -> bool:
-    return bool(_tokens(query) & _WEATHER_KEYWORDS)
-
-
-def _is_price_query(query: str) -> bool:
-    return bool(_tokens(query) & _PRICE_KEYWORDS)
 
 
 def _is_greeting(text: str) -> bool:
@@ -700,8 +729,7 @@ def _extract_txt_text(txt_bytes: bytes) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_cnn(pil_image: Image.Image) -> tuple[str, str, list[str]]:
-    """Returns (cnn_info_text, agent_type, sources).
-    cnn_info_text is empty string if CNN is unavailable or returns nothing."""
+    """Returns (cnn_info_text, agent_type, sources)."""
     try:
         from inference import predict_from_pil
         result = predict_from_pil(pil_image)
@@ -753,35 +781,29 @@ def _run_cnn(pil_image: Image.Image) -> tuple[str, str, list[str]]:
 
 async def process_query(
     user_message:  str,
-    image_bytes:   bytes | None          = None,
-    file_bytes:    bytes | None          = None,
-    file_name:     str   | None          = None,
-    override_lang: str                   = "",
+    image_bytes:   bytes | None              = None,
+    file_bytes:    bytes | None              = None,
+    file_name:     str   | None              = None,
+    override_lang: str                       = "",
     memory:        ConversationMemory | None = None,
 ) -> AgentResponse:
     """
-    Full pipeline with conversation memory.
+    Full pipeline with intent detection, conditional weather injection,
+    intent-filtered RAG, and conversation memory.
 
     Parameters
     ----------
     user_message  : Raw message from the farmer (any language).
     image_bytes   : Optional uploaded image (disease detection via Gemini).
     file_bytes    : Optional uploaded document (PDF or TXT).
-    file_name     : Filename of the uploaded document (used to pick parser).
+    file_name     : Filename of the uploaded document.
     override_lang : Force a specific output language (e.g. "te").
     memory        : ConversationMemory instance for this session.
-                    Create once per session:  memory = settings.new_memory()
-                    Pass it into every call — the pipeline mutates it in-place.
 
     Returns
     -------
     AgentResponse — includes the same memory object so stateless callers
-    (e.g. FastAPI request handlers) can store it in session state.
-
-    Memory lifecycle inside this function:
-      Step  1 — user turn stored immediately
-      Step 13 — assistant turn stored after LLM call
-      Step 14 — summarisation triggered if window is full
+    can store it in session state.
     """
 
     # ── 1. Language detection ─────────────────────────────────────────────────
@@ -794,7 +816,6 @@ async def process_query(
     )
     logger.debug("[Query] %s", english_query)
 
-    # Output language: detected lang takes priority; else override; else English
     output_lang = lang_code if lang_code != "en" else (override_lang or "en")
 
     # ── 3. Initialise or update memory ───────────────────────────────────────
@@ -802,18 +823,12 @@ async def process_query(
         memory = settings.new_memory(lang=output_lang)
         logger.info("[Memory] New session started (lang=%s)", output_lang)
     else:
-        # Keep memory's lang in sync with detected language
         memory.lang = output_lang
 
-    # Update session context the agent has detected so far
     detected_crop_now = _extract_crop(english_query)
     if detected_crop_now:
         memory.detected_crop = detected_crop_now
-    if _is_weather_query(english_query):
-        # Best-effort location from the query itself; refine in step 7
-        memory.detected_location = memory.detected_location or english_query
 
-    # Store the user's raw message (original language — richer for summaries)
     memory.add_turn("user", user_message)
 
     # ── 4. Language-specific system prompt ───────────────────────────────────
@@ -830,7 +845,6 @@ async def process_query(
             from_english(reject_en, output_lang)
             if output_lang != "en" else reject_en
         )
-        # Still store the assistant turn so memory stays coherent
         memory.add_turn("assistant", reject_out)
         return AgentResponse(
             response          = reject_out,
@@ -868,27 +882,53 @@ async def process_query(
         except Exception as exc:
             logger.error("[Image] Processing error: %s", exc)
 
-    # ── 8. Live weather ───────────────────────────────────────────────────────
-    live_weather = ""
-    if _is_weather_query(english_query):
-        logger.info("[Weather] Fetching forecast")
-        live_weather = await _fetch_weather(english_query)
+    # ── 8. ✅ FIX 4 — Intent detection ────────────────────────────────────────
+    #   Images always resolve to "disease" intent for weather/RAG purposes.
+    if pil_image is not None:
+        intent = "disease"
+    else:
+        intent = detect_intent(english_query)
 
-    # ── 9. Live mandi prices ──────────────────────────────────────────────────
+    # Carry detected location forward into memory when weather-relevant
+    if intent in WEATHER_RELEVANT_INTENTS:
+        memory.detected_location = memory.detected_location or english_query
+
+    logger.info("[Intent] '%s...' → %s", english_query[:60], intent)
+
+    # ── 9. ✅ FIX 1 — Conditional weather injection ───────────────────────────
+    #   Weather is fetched ONLY when the intent warrants it.
+    #   Pure market / yield / soil / seed / scheme queries skip the weather API.
+    live_weather = ""
+    if intent in WEATHER_RELEVANT_INTENTS:
+        location = memory.detected_location or settings.default_location_name
+        logger.info("[Weather] Intent '%s' — fetching forecast for: %s", intent, location)
+        live_weather = await _fetch_weather(location)
+    else:
+        logger.debug("[Weather] Skipped — intent '%s' does not require weather.", intent)
+
+    # ── 10. Live mandi prices ─────────────────────────────────────────────────
+    #   Prices fetched only for market intent.
     live_prices   = ""
     detected_crop = memory.detected_crop or _extract_crop(english_query)
-    if _is_price_query(english_query) and detected_crop:
-        logger.info("[Price] Fetching for: %s", detected_crop)
+    if intent == "market" and detected_crop:
+        logger.info("[Price] Intent 'market' — fetching for: %s", detected_crop)
         live_prices = await _fetch_live_prices(detected_crop, lang=output_lang)
+    elif intent == "market" and not detected_crop:
+        logger.info("[Price] Intent 'market' but no crop detected — skipping live fetch.")
 
-    # ── 10. RAG ───────────────────────────────────────────────────────────────
-    chunks      = retrieve(english_query)
+    # ── 11. ✅ FIX 3 — Intent-filtered RAG retrieval ──────────────────────────
+    #   Pass intent so rag_pipeline can prioritise the correct chunk categories.
+    #   e.g. "yield estimation" → seed/general only; NOT spray/weather chunks.
+    chunks      = retrieve(english_query, intent=intent)
     rag_context = format_context(chunks)
 
-    # ── 11. Determine agent type + sources ────────────────────────────────────
-    agent_type = cnn_agent or get_agent_from_chunks(chunks)
-    if live_prices and not cnn_agent:
-        agent_type = "market"
+    # ── 12. Determine agent type + sources ────────────────────────────────────
+    agent_type = cnn_agent or intent
+    if agent_type not in (
+        "disease", "market", "general", "yield",
+        "fertilizer", "irrigation", "soil", "seed", "scheme",
+    ):
+        agent_type = get_agent_from_chunks(chunks)
 
     sources: list[str] = list({c["source"] for c in chunks})
     if cnn_sources:
@@ -898,7 +938,7 @@ async def process_query(
     if live_weather:
         sources = list(set(sources + [settings.openmeteo_source_label]))
 
-    # ── 12. Build prompt (live data + RAG only; memory injected in _call_groq) ─
+    # ── 13. Build prompt ──────────────────────────────────────────────────────
     prompt = _build_prompt(
         english_query = english_query,
         rag_context   = rag_context,
@@ -908,7 +948,7 @@ async def process_query(
         extracted_doc = extracted_text,
     )
 
-    # ── 13. Call LLM ─────────────────────────────────────────────────────────
+    # ── 14. Call LLM ──────────────────────────────────────────────────────────
     if pil_image is not None:
         logger.info("[Router] Image → Gemini")
         english_answer = _call_gemini_with_image(
@@ -918,28 +958,29 @@ async def process_query(
             system_prompt = system_prompt,
         )
     else:
-        logger.info("[Router] Text → Groq")
+        logger.info("[Router] Text → Groq (%s)", settings.groq_model)
         english_answer = _call_groq(
             user_prompt   = prompt,
             system_prompt = system_prompt,
             memory        = memory,
         )
 
-    # ── 14. Translate answer back ─────────────────────────────────────────────
+    # ── 15. Translate answer back ─────────────────────────────────────────────
     final_answer = (
         from_english(english_answer, output_lang)
         if output_lang != "en" else english_answer
     )
 
-    # ── 15. Store assistant turn + trigger summarisation if needed ────────────
+    # ── 16. Store assistant turn + trigger summarisation if needed ────────────
     memory.add_turn("assistant", final_answer)
     _maybe_summarise(memory, system_prompt)
 
     logger.info(
-        "[Memory] Session: %d turns | summary: %s | crop: %s",
+        "[Memory] Session: %d turns | summary: %s | crop: %s | intent: %s",
         memory.turn_count,
         "yes" if memory._summary else "no",
         memory.detected_crop or "unknown",
+        intent,
     )
 
     return AgentResponse(
