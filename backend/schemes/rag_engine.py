@@ -1,12 +1,11 @@
 # =============================================================================
-# AgriGPT — Feature 6: Government Schemes Q&A
-# schemes/rag_engine.py  (Fixed v2 — timeout + async safe)
+# AgriGPT — Government Schemes Q&A
+# schemes/rag_engine.py  (Fixed v3)
 #
-# FIXES:
-#   1. No HuggingFaceEmbeddings / sentence_transformers (OOM fix)
-#   2. Gemini call has 30s timeout (no more infinite hang)
-#   3. _engine_loaded flag prevents double init
-#   4. Removed langchain_classic (invalid package)
+# FIXES from v2:
+#   - Removed signal.alarm() — only works on main thread, crashes in executor
+#   - Timeout is handled by asyncio.wait_for() in router instead
+#   - Cleaner error handling
 # =============================================================================
 
 import os
@@ -18,16 +17,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR   = Path(__file__).resolve().parent.parent
-FAISS_DIR  = BASE_DIR / "data" / "scheme_faiss"
-CHROMA_DIR = BASE_DIR / "data" / "scheme_chroma"
+LLM_MODEL  = "gemini-1.5-flash"
 
-LLM_MODEL  = "gemini-1.5-flash"   # More reliable free-tier than 2.5-flash
-TOP_K      = 5
-
-# ── Singletons ────────────────────────────────────────────────────────────────
-_retriever     = None
-_embeddings    = None
 _llm           = None
 _vector_db     = "none"
 _engine_loaded = False
@@ -46,18 +37,18 @@ def _get_prompt(language: str, context: str, question: str) -> str:
 
         किसान का प्रश्न: {question}
 
-        केवल valid JSON object दें (कोई markdown नहीं):
+        केवल valid JSON object दें (कोई markdown नहीं, JSON के बाहर कोई text नहीं):
         {{
           "answer": "<3-5 वाक्यों में उत्तर>",
           "scheme_name": "<योजना का नाम>",
           "eligibility": "<पात्रता>",
           "how_to_apply": "<आवेदन कैसे करें>",
           "documents_needed": ["<दस्तावेज़ 1>", "<दस्तावेज़ 2>"],
-          "helpline": "<हेल्पलाइन>",
-          "amount_or_benefit": "<राशि>",
+          "helpline": "<हेल्पलाइन नंबर>",
+          "amount_or_benefit": "<राशि या लाभ>",
           "state_specific": "<राज्य विशेष जानकारी>",
           "sources": ["<स्रोत>"],
-          "tip": "<सुझाव>"
+          "tip": "<एक त्वरित सुझाव>"
         }}
         """).strip()
 
@@ -76,7 +67,7 @@ def _get_prompt(language: str, context: str, question: str) -> str:
           "scheme_name": "<పథకం పేరు>",
           "eligibility": "<అర్హత>",
           "how_to_apply": "<దరఖాస్తు విధానం>",
-          "documents_needed": ["<పత్రం 1>"],
+          "documents_needed": ["<పత్రం 1>", "<పత్రం 2>"],
           "helpline": "<హెల్ప్‌లైన్>",
           "amount_or_benefit": "<మొత్తం>",
           "state_specific": "<రాష్ట్ర సమాచారం>",
@@ -88,25 +79,27 @@ def _get_prompt(language: str, context: str, question: str) -> str:
     else:
         return textwrap.dedent(f"""
         You are AgriGPT's Government Schemes Assistant for Indian farmers.
-        Focus on Telangana and Andhra Pradesh schemes. Be concise and farmer-friendly.
+        Focus on Telangana and Andhra Pradesh. Be concise and farmer-friendly.
 
         CONTEXT:
         {context}
 
         FARMER'S QUESTION: {question}
 
-        Reply ONLY with a valid JSON object (no markdown, no text outside JSON):
+        Reply ONLY with a valid JSON object.
+        No markdown fences. No text before or after the JSON.
+
         {{
           "answer": "<clear 3-5 sentence answer>",
           "scheme_name": "<primary scheme name>",
           "eligibility": "<who qualifies>",
-          "how_to_apply": "<step-by-step>",
+          "how_to_apply": "<step-by-step process>",
           "documents_needed": ["<doc1>", "<doc2>"],
-          "helpline": "<number or URL>",
-          "amount_or_benefit": "<amount or benefit>",
-          "state_specific": "<state-specific note>",
-          "sources": ["<source>"],
-          "tip": "<one quick tip>"
+          "helpline": "<helpline number or URL>",
+          "amount_or_benefit": "<amount or subsidy benefit>",
+          "state_specific": "<Telangana or AP note, or 'Applies across India'>",
+          "sources": ["<source name>"],
+          "tip": "<one quick action tip>"
         }}
         """).strip()
 
@@ -115,21 +108,18 @@ def _get_prompt(language: str, context: str, question: str) -> str:
 # STARTUP
 # =============================================================================
 def load_schemes_engine():
-    """Initialise Gemini. Skip heavy embedder — use static KB only."""
+    """Initialise Gemini only. No embedder. No FAISS. No OOM."""
     global _llm, _vector_db, _engine_loaded
 
     if _engine_loaded:
         return
 
-    # Skip embedder entirely — no FAISS/ChromaDB needed for static KB
     _vector_db = "none"
-    logger.info("[Schemes RAG] Using static KB only (no FAISS/embedder).")
 
-    # Gemini client
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise EnvironmentError(
-            "GEMINI_API_KEY not set in Render Environment Variables."
+            "GEMINI_API_KEY is not set in Render Environment Variables."
         )
 
     import google.generativeai as genai
@@ -141,7 +131,7 @@ def load_schemes_engine():
             temperature=0.1,
         )
     )
-    logger.info(f"[Schemes RAG] Gemini ready: {LLM_MODEL}")
+    logger.info("[Schemes RAG] Gemini ready: %s", LLM_MODEL)
     _engine_loaded = True
 
 
@@ -149,18 +139,24 @@ def load_schemes_engine():
 # STATIC KB CONTEXT
 # =============================================================================
 def _static_context(question: str, state: str, language: str) -> str:
-    from schemes.static_kb import search_static
-    hits = search_static(question, state=state, top_k=3)
+    try:
+        from schemes.static_kb import search_static
+        hits = search_static(question, state=state, top_k=3)
+    except Exception as e:
+        logger.error("[Schemes RAG] static_kb error: %s", e)
+        hits = []
+
     if not hits:
-        return "No matching static KB entries found. Answer from general knowledge."
+        return "No matching static KB entries found. Use your general knowledge about Indian government agricultural schemes."
+
     parts = []
     for e in hits:
         if language == "hi":
-            content = e.get("content_hi", e["content_en"])
+            content = e.get("content_hi", e.get("content_en", ""))
         elif language == "te":
-            content = e.get("content_te", e["content_en"])
+            content = e.get("content_te", e.get("content_en", ""))
         else:
-            content = e["content_en"]
+            content = e.get("content_en", "")
         parts.append(
             f"[{e['name']} | {e['type']}]\n{content.strip()}\nSource: {e['source']}"
         )
@@ -176,11 +172,8 @@ def ask(
     language: str = "en",
 ) -> dict:
     """
-    Schemes Q&A:
-      1. Load engine if not yet loaded
-      2. Build context from static KB
-      3. Call Gemini with 30s timeout
-      4. Parse and return structured JSON
+    Schemes Q&A — called from router via asyncio.to_thread().
+    No signal.alarm() here — timeout handled by asyncio.wait_for() in router.
     """
     global _llm, _engine_loaded
 
@@ -191,41 +184,20 @@ def ask(
 
     language = language if language in ("en", "hi", "te") else "en"
 
-    # Build context from static KB
-    context = _static_context(question, state, language)
+    # Build context
+    context    = _static_context(question, state, language)
     enriched_q = question
     if state:
         enriched_q += f"\n[Farmer's state: {state}]"
 
     prompt = _get_prompt(language, context, enriched_q)
 
-    # Call Gemini with timeout protection
+    # Call Gemini (sync — safe because router uses asyncio.to_thread)
     import google.generativeai as genai
-    import signal
+    response = _llm.generate_content(prompt)
+    raw      = response.text.strip()
 
-    def _timeout_handler(signum, frame):
-        raise TimeoutError("Gemini API call timed out after 25 seconds")
-
-    raw = ""
-    try:
-        # Use signal-based timeout on Linux (Render runs Linux)
-        signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(25)  # 25 second timeout
-        try:
-            response = _llm.generate_content(prompt)
-            raw = response.text.strip()
-        finally:
-            signal.alarm(0)  # Cancel alarm
-    except TimeoutError:
-        logger.error("[Schemes RAG] Gemini timed out after 25s")
-        raise Exception("The AI took too long to respond. Please try again.")
-    except Exception as e:
-        err = str(e)
-        if "RESOURCE_EXHAUSTED" in err or "429" in err or "quota" in err.lower():
-            raise Exception("RESOURCE_EXHAUSTED: Gemini API quota exceeded. Please try again later.")
-        raise
-
-    # Strip markdown fences
+    # Strip accidental markdown fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$",          "", raw)
     raw = raw.strip()
@@ -236,7 +208,7 @@ def ask(
     result["_meta"] = {
         "vector_db"      : _vector_db,
         "pdf_chunks_used": 0,
-        "static_hits"    : len(_static_context(question, state, language).split("---")),
+        "static_hits"    : 1,
         "llm_model"      : LLM_MODEL,
         "language"       : language,
         "state"          : state or "general",
