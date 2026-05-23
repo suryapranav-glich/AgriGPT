@@ -919,7 +919,7 @@ async def process_query(
     # ── 11. ✅ FIX 3 — Intent-filtered RAG retrieval ──────────────────────────
     #   Pass intent so rag_pipeline can prioritise the correct chunk categories.
     #   e.g. "yield estimation" → seed/general only; NOT spray/weather chunks.
-    chunks      = retrieve(english_query, intent=intent)
+    chunks = retrieve(english_query, intent=intent, crop=detected_crop)
     rag_context = format_context(chunks)
 
     # ── 12. Determine agent type + sources ────────────────────────────────────

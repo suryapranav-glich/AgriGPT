@@ -15,11 +15,18 @@ Changes in this version
              This means "yield estimation of paddy per acre" returns
              seed/general chunks only — NOT spray/weather/market chunks.
 
+  ✅ FIX 5 — retrieve() now accepts a *crop* parameter.
+             When a specific crop is detected (e.g. "paddy"), only
+             crop-matching chunks AND crop-agnostic chunks (soil, market,
+             disease, weather, scheme) enter the scoring pool.
+             This stops groundnut/soybean chunks from polluting a paddy query.
+
 Flow:
   1. farming_agent detects intent via detect_intent(query)
-  2. Passes intent into retrieve(query, intent=intent)
-  3. retrieve() scores chunks with TF-IDF + intent-category boost/penalty
-  4. Returns top-K chunks to farming_agent for prompt construction
+  2. farming_agent detects crop via _extract_crop(query)
+  3. Passes both into retrieve(query, intent=intent, crop=crop)
+  4. retrieve() pre-filters by crop prefix, then scores with TF-IDF + intent boost
+  5. Returns top-K chunks to farming_agent for prompt construction
 """
 
 from __future__ import annotations
@@ -33,6 +40,60 @@ from chat.knowledge_base import KNOWLEDGE_CHUNKS
 from chat.config import INTENT_TO_CHUNK_CATEGORIES
 
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CROP → CHUNK ID PREFIX MAP
+#
+# Maps detected crop names to the chunk id prefix(es) used in knowledge_base.py.
+# Chunks whose id starts with a matching prefix are "crop-specific" and stay in
+# the scoring pool.  Everything else is filtered OUT unless it's crop-agnostic.
+#
+# Keep this in sync with _KNOWN_CROPS_ORDERED in farming_agent.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CROP_TO_ID_PREFIX: dict[str, list[str]] = {
+    "paddy":       ["rice_"],
+    "rice":        ["rice_"],
+    "wheat":       ["wheat_"],          # no wheat chunk yet → market fallback
+    "cotton":      ["cotton_"],
+    "maize":       ["maize_"],
+    "corn":        ["maize_"],
+    "soybean":     ["soy_"],
+    "groundnut":   ["gnut_"],
+    "chilli":      ["hort_"],
+    "onion":       ["hort_"],
+    "tomato":      ["hort_"],
+    "potato":      ["hort_"],
+    "brinjal":     ["hort_"],
+    "cabbage":     ["hort_"],
+    "cauliflower": ["hort_"],
+    "banana":      ["hort_"],
+    "mango":       ["hort_"],
+    # Crops without a dedicated chunk — fall through to agnostic pool only
+    "jowar":       [],
+    "bajra":       [],
+    "ragi":        [],
+    "tur":         [],
+    "arhar":       [],
+    "moong":       [],
+    "urad":        [],
+    "mustard":     [],
+    "sunflower":   [],
+    "sugarcane":   [],
+}
+
+# These chunk-id prefixes are crop-agnostic and are ALWAYS included in the
+# scoring pool, regardless of which crop was detected.
+_CROP_AGNOSTIC_PREFIXES: tuple[str, ...] = (
+    "soil_",
+    "irrigation_",
+    "market_",
+    "disease_",
+    "weather_",
+    "scheme_",
+    "disease_auto_",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TF-IDF CORPUS PRE-COMPUTATION
@@ -63,10 +124,10 @@ _INTENT_TO_AGENT: dict[str, list[str]] = {
 }
 
 # Scoring multipliers
-_INTENT_MATCH_BOOST   = 3.0   # chunk agent matches intent
-_INTENT_MISMATCH_PENALTY = 0.3  # chunk agent does NOT match intent
+_INTENT_MATCH_BOOST      = 3.0   # chunk agent matches intent
+_INTENT_MISMATCH_PENALTY = 0.3   # chunk agent does NOT match intent
 # "general" chunks are always slightly relevant as fallback
-_GENERAL_AGENT_FLOOR  = 0.6   # applied to "general" chunks when intent is specific
+_GENERAL_AGENT_FLOOR     = 0.6   # applied to "general" chunks when intent is specific
 
 
 def _tokenize(text: str) -> list[str]:
@@ -112,10 +173,10 @@ def _score_chunk(
       - general/seed chunks rise to the top
       - market/disease chunks are effectively buried
     """
-    chunk_text   = chunk["content"] + " " + chunk.get("topic", "") + " " + chunk.get("id", "")
-    chunk_tokens = _tokenize(chunk_text)
+    chunk_text    = chunk["content"] + " " + chunk.get("topic", "") + " " + chunk.get("id", "")
+    chunk_tokens  = _tokenize(chunk_text)
     chunk_counter = Counter(chunk_tokens)
-    chunk_len = max(len(chunk_tokens), 1)
+    chunk_len     = max(len(chunk_tokens), 1)
 
     # TF-IDF overlap score
     base_score = 0.0
@@ -144,10 +205,63 @@ def _score_chunk(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CROP PRE-FILTER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_crop_filter(crop: str | None) -> list[dict]:
+    """
+    Return the subset of KNOWLEDGE_CHUNKS that should be scored for *crop*.
+
+    When crop is detected:
+      • Keep chunks whose id starts with a crop-specific prefix (e.g. "rice_")
+      • Always keep crop-agnostic chunks (soil, market, disease, weather, scheme)
+      • Drop all other crop-specific chunks (e.g. "gnut_", "soy_", "cotton_")
+
+    When crop is None: return the full corpus unchanged.
+
+    This is the key fix for the "paddy yield → groundnut answer" bug:
+    before TF-IDF even runs, groundnut/soybean/maize chunks are excluded
+    when the farmer asks about paddy.
+    """
+    if not crop:
+        return KNOWLEDGE_CHUNKS
+
+    crop_lower = crop.lower()
+    crop_prefixes = CROP_TO_ID_PREFIX.get(crop_lower)
+
+    if crop_prefixes is None:
+        # Completely unknown crop — no filter, let TF-IDF sort it out
+        logger.debug("Crop filter: unknown crop '%s' — using full corpus", crop)
+        return KNOWLEDGE_CHUNKS
+
+    filtered = []
+    for chunk in KNOWLEDGE_CHUNKS:
+        chunk_id = chunk.get("id", "")
+        # Always include crop-agnostic chunks
+        if any(chunk_id.startswith(p) for p in _CROP_AGNOSTIC_PREFIXES):
+            filtered.append(chunk)
+            continue
+        # Include chunks that match this crop's prefixes (if any defined)
+        if crop_prefixes and any(chunk_id.startswith(p) for p in crop_prefixes):
+            filtered.append(chunk)
+
+    logger.debug(
+        "Crop filter '%s' (prefixes=%s): %d/%d chunks retained",
+        crop, crop_prefixes, len(filtered), len(KNOWLEDGE_CHUNKS),
+    )
+    return filtered
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PUBLIC API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def retrieve(query: str, top_k: int | None = None, intent: str = "general") -> list[dict]:
+def retrieve(
+    query:  str,
+    top_k:  int | None = None,
+    intent: str = "general",
+    crop:   str | None = None,
+) -> list[dict]:
     """
     Retrieve the top-K most relevant knowledge chunks for *query*.
 
@@ -158,6 +272,9 @@ def retrieve(query: str, top_k: int | None = None, intent: str = "general") -> l
     intent  : Detected farming intent — controls category boosting.
               One of: weather / disease / spraying / fertilizer / irrigation /
                       market / yield / soil / seed / scheme / general
+    crop    : Detected crop name (e.g. "paddy", "cotton") — controls
+              pre-filtering so only crop-relevant chunks enter scoring.
+              Pass None to score all chunks (multi-crop or general queries).
 
     Returns
     -------
@@ -165,11 +282,11 @@ def retrieve(query: str, top_k: int | None = None, intent: str = "general") -> l
 
     Examples
     --------
-    "paddy price today"         intent=market     → market chunks boosted
-    "yellow leaves on rice"     intent=disease    → disease chunks boosted
-    "yield estimation per acre" intent=yield      → general/seed boosted,
-                                                    market/disease penalised
-    "how much urea for cotton"  intent=fertilizer → general chunks boosted
+    "paddy price today"         intent=market  crop=paddy  → rice_+market_ chunks
+    "yield estimation per acre" intent=yield   crop=paddy  → rice_+agnostic only
+    "yellow leaves on rice"     intent=disease crop=paddy  → rice_+disease_ chunks
+    "how much urea for cotton"  intent=fert    crop=cotton → cotton_+agnostic chunks
+    "groundnut tikka disease"   intent=disease crop=gnut   → gnut_+disease_ chunks
     """
     from chat.config import settings
     k = top_k or settings.top_k_chunks
@@ -177,17 +294,22 @@ def retrieve(query: str, top_k: int | None = None, intent: str = "general") -> l
     if not query.strip():
         return []
 
-    query_tokens  = _tokenize(query)
+    query_tokens = _tokenize(query)
     if not query_tokens:
         return []
 
     query_counter = Counter(query_tokens)
 
+    # ── ✅ FIX 5: Crop-aware pre-filter ──────────────────────────────────────
+    # Filter the candidate pool BEFORE TF-IDF scoring.
+    # This is the critical step that prevents cross-crop contamination.
+    candidate_chunks = _apply_crop_filter(crop)
+
     scored = []
-    for chunk in KNOWLEDGE_CHUNKS:
+    for chunk in candidate_chunks:
         score = _score_chunk(chunk, query_tokens, query_counter, intent)
         if score > 0:
-            result        = dict(chunk)
+            result          = dict(chunk)
             result["score"] = round(score, 4)
             scored.append(result)
 
@@ -195,12 +317,13 @@ def retrieve(query: str, top_k: int | None = None, intent: str = "general") -> l
     top = scored[:k]
 
     logger.debug(
-        "RAG retrieved %d/%d chunks | query='%s...' | intent=%s | "
+        "RAG retrieved %d/%d chunks | query='%s...' | intent=%s | crop=%s | "
         "top agent=%s score=%.4f",
         len(top),
-        len(scored),
+        len(candidate_chunks),
         query[:50],
         intent,
+        crop or "none",
         top[0].get("agent", "?") if top else "none",
         top[0].get("score", 0)   if top else 0,
     )
