@@ -330,6 +330,10 @@ def ask(
       dict with answer, eligibility, how_to_apply, documents_needed,
       helpline, amount_or_benefit, sources (with page + snippet), state_specific, tip, _meta
     """
+    global _llm
+    if _llm is None:
+        load_schemes_engine()
+
     language = language if language in ("en", "hi", "te") else "en"
 
     # ── 1. Build RetrievalQA chain ────────────────────────────────────────────

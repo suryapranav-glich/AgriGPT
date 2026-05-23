@@ -200,6 +200,10 @@ def recommend(
         json.JSONDecodeError — if Gemini returns malformed JSON
         Exception            — on API / network errors
     """
+    global _llm
+    if _llm is None:
+        load_rag_engine()
+
     # 1. Query ─────────────────────────────────────────────────────────────────
     query = (
         f"{crop} {soil_type} fertilizer NPK recommendation "
