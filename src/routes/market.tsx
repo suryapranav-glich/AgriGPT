@@ -282,10 +282,10 @@ function Market() {
   // Helpers for Chart formatting
   const getChartData = () => {
     if (!data) return [];
-    
+
     // Connect the history line to the first forecast line point smoothly
     const lastHistoryItem = data.history[data.history.length - 1];
-    
+
     const formattedHistory = data.history.map((h) => ({
       dateLabel: formatDate(h.date),
       price: h.price,
@@ -707,7 +707,6 @@ function Market() {
                       }}
                     />
                     {/* Confidence band shading */}
-                    {/* Confidence band shading */}
                     <Area
                       type="monotone"
                       dataKey="bounds"
@@ -748,7 +747,8 @@ function Market() {
                   <Label>Agent 3: Market Advisory Node</Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Pill tone="brand">Google Gemini 2.5 Flash</Pill>
+                  {/* ── Updated label: xAI Grok 3 Mini ── */}
+                  <Pill tone="brand">xAI Grok 3 Mini</Pill>
                   <Button
                     variant="secondary"
                     onClick={handleRegenerateAdvisory}
@@ -797,7 +797,7 @@ function Market() {
                   <MapPin size={12} /> {t("rankedByBestRates")}
                 </span>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead style={{ fontSize: 11, color: "var(--c-muted)", borderBottom: "1px solid var(--c-border)" }}>

@@ -41,11 +41,11 @@ try:
 except ImportError:
     HAS_ARIMA = False
 
-# LangChain + LangGraph (Google Gemini)
+# LangChain + LangGraph (Grok via OpenAI-compatible API)
 try:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_openai import ChatOpenAI
     from langgraph.graph import END, StateGraph
     HAS_LANGCHAIN = True
 except ImportError:
@@ -67,7 +67,7 @@ except ImportError:
 
 # ── Environment ───────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY", "")
+GROK_API_KEY      = os.getenv("GROK_API_KEY", "")
 AGMARKNET_API_KEY = os.getenv("AGMARKNET_API_KEY", "")
 REDIS_URL         = os.getenv("REDIS_URL", "redis://localhost:6379")
 MONGODB_URI       = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -313,13 +313,13 @@ def simulate_price_history(crop: str, district: str, days: int = 90) -> list[dic
     Takes district into account to ensure prices are distinct per district.
     """
     base  = CROP_BASE_PRICES.get(crop, 2000)
-    
+
     # Deterministic price level multiplier per district (approx 0.82 to 1.18)
     dist_seed = zlib.adler32(district.encode("utf-8"))
     dist_rng = random.Random(dist_seed)
     dist_mult = dist_rng.uniform(0.82, 1.18)
     base = base * dist_mult
-    
+
     today = date.today()
     # Seed noise generation using both crop and district so trend-noise is distinct
     combined_seed = zlib.adler32(f"{crop}:{district}".encode("utf-8"))
@@ -569,13 +569,14 @@ class MarketAgentState(TypedDict):
 
 def get_llm():
     """
-    Blueprint: Google Gemini 1.5 Flash via LangChain Google GenAI integration.
+    xAI Grok via OpenAI-compatible API using LangChain ChatOpenAI.
     Fast + cost-efficient, ideal for streaming advisory responses.
     """
-    if GEMINI_API_KEY and HAS_LANGCHAIN:
-        return ChatGoogleGenerativeAI(
-            google_api_key=GEMINI_API_KEY,
-            model="gemini-2.5-flash",
+    if GROK_API_KEY and HAS_LANGCHAIN:
+        return ChatOpenAI(
+            api_key=GROK_API_KEY,
+            base_url="https://api.x.ai/v1",
+            model="grok-3-mini",
             temperature=0.3,
             streaming=True,
         )
@@ -609,8 +610,8 @@ Write a 3-5 sentence market advisory for this farmer in {language_name}."""
 
 
 def _build_market_chain():
-    """Build the LangChain prompt → Gemini → parser chain."""
-    llm   = get_llm()
+    """Build the LangChain prompt → Grok → parser chain."""
+    llm = get_llm()
     if not llm:
         return None
     prompt = ChatPromptTemplate.from_messages([
@@ -634,15 +635,15 @@ def _build_market_graph():
     async def market_advisory_node(state: MarketAgentState) -> MarketAgentState:
         chain = _build_market_chain()
         if not chain:
-            state["advisory"] = "Advisory unavailable — configure GEMINI_API_KEY."
+            state["advisory"] = "Advisory unavailable — configure GROK_API_KEY."
             return state
         result = await chain.ainvoke({
-            "crop":       state["crop"],
-            "district":  state["district"],
-            "price_str": f"Rs {state['price']:,.0f}",
-            "action":    state["action"],
-            "trend_7d_str": f"{state['trend_7d']:+.1f}%",
-            "pct_avg_str":  f"{state['pct_avg']:+.1f}%",
+            "crop":          state["crop"],
+            "district":      state["district"],
+            "price_str":     f"Rs {state['price']:,.0f}",
+            "action":        state["action"],
+            "trend_7d_str":  f"{state['trend_7d']:+.1f}%",
+            "pct_avg_str":   f"{state['pct_avg']:+.1f}%",
             "language_name": "English",
         })
         state["advisory"] = result
@@ -674,7 +675,7 @@ async def run_market_agent_stream(
     lang:     str = "en",
 ) -> AsyncIterator[str]:
     """
-    LangChain streaming chain: PromptTemplate → Gemini 2.5 Flash → StrOutputParser.
+    LangChain streaming chain: PromptTemplate → Grok (xAI) → StrOutputParser.
     Token-by-token streaming via chain.astream().
     """
     chain = _build_market_chain()
@@ -724,12 +725,12 @@ async def run_market_agent_stream(
     language_name = lang_map.get(lang, "English")
 
     inputs = {
-        "crop":        crop,
-        "district":    district,
-        "price_str":   f"Rs {price:,.0f}",
-        "action":      action,
-        "trend_7d_str": f"{trend_7d:+.1f}%",
-        "pct_avg_str":  f"{pct_avg:+.1f}%",
+        "crop":          crop,
+        "district":      district,
+        "price_str":     f"Rs {price:,.0f}",
+        "action":        action,
+        "trend_7d_str":  f"{trend_7d:+.1f}%",
+        "pct_avg_str":   f"{pct_avg:+.1f}%",
         "language_name": language_name,
     }
 
@@ -804,9 +805,9 @@ async def market_prices(
                 from auth.db import chat_history_col
                 from datetime import datetime, timezone
                 chat_history_col().insert_one({
-                    "user_id": ObjectId(user_id),
-                    "agent": "market",
-                    "query": f"Checked prices for {crop} in {district}",
+                    "user_id":    ObjectId(user_id),
+                    "agent":      "market",
+                    "query":      f"Checked prices for {crop} in {district}",
                     "created_at": datetime.now(timezone.utc)
                 })
         except Exception:
@@ -838,9 +839,9 @@ async def advisor_stream(
     lang:     str   = Query("en"),
 ):
     """
-    SSE streaming endpoint — LangChain chain streams Gemini tokens one-by-one.
+    SSE streaming endpoint — LangChain chain streams Grok tokens one-by-one.
     Blueprint: FastAPI StreamingResponse + LangChain .astream() for non-blocking advisory.
-    LLM: Google Gemini 1.5 Flash via langchain-google-genai (NOT OpenAI / Grok).
+    LLM: xAI Grok via langchain-openai with OpenAI-compatible base_url (NOT Gemini / OpenAI).
     """
     async def generate():
         async for token in run_market_agent_stream(
@@ -867,8 +868,8 @@ async def health():
     r = await get_redis()
     return {
         "status":      "ok",
-        "llm":         "gemini-1.5-flash",
-        "llm_ready":   bool(GEMINI_API_KEY and HAS_LANGCHAIN),
+        "llm":         "grok-3-mini",
+        "llm_ready":   bool(GROK_API_KEY and HAS_LANGCHAIN),
         "prophet":     HAS_PROPHET,
         "arima":       HAS_ARIMA,
         "redis":       r is not None,

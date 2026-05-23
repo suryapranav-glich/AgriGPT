@@ -1,13 +1,13 @@
 # =============================================================================
-# AgriGPT — FastAPI Server  (updated: Auth + MongoDB + Dashboard added)
-# Run: python app.py
+# AgriGPT — FastAPI Server
+# Dual LLM: Groq (text) + Gemini (images/soil analysis)
+# Deployed: Backend → Render | Frontend → Vercel (https://agrigpt-xi.vercel.app)
 # =============================================================================
 
 import os
 import io
 import sys
 
-# Load environment variables from backend/.env
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -28,9 +28,15 @@ def safe_object_id(uid):
     except Exception:
         return uid
 
-# ── Auth & Dashboard routers ──────────────────────────────────────────────────
-from auth.router import router as auth_router
-from dashboard.router import router as dashboard_router
+# ── Routers ───────────────────────────────────────────────────────────────────
+from auth.router       import router as auth_router
+from dashboard.router  import router as dashboard_router
+from fertilizer.router import router as fertilizer_router
+from schemes.router    import router as schemes_router
+from irrigation.router import router as irrigation_router
+from market            import router as market_router
+from routes.voice_routes import router as voice_router
+from chat.router       import router as chat_router
 
 # ── Resolve paths ─────────────────────────────────────────────────────────────
 BASE_DIR     = os.path.join(os.path.dirname(__file__), "saved_models")
@@ -40,33 +46,10 @@ CLASSES_PATH = os.path.join(BASE_DIR, "class_names.json")
 # ── Feature 1: Disease Detection ──────────────────────────────────────────────
 from inference import predict_from_pil
 
-# ── Feature 3: Fertilizer RAG engine ─────────────────────────────────────────
-# from fertilizer.rag_engine import load_rag_engine
-from fertilizer.router import router as fertilizer_router
-
-# ── Feature 6: Government Schemes Q&A ────────────────────────────────────────
-# from schemes.rag_engine import load_schemes_engine
-from schemes.router import router as schemes_router
-
-# ── Feature 5: Weather-Based Irrigation Planning (Agent 2) ───────────────────
-from irrigation.router import router as irrigation_router
-
-# ── Feature 7: Crop Price Prediction & Market Advisor ────────────────────────
-# from market import load_market_graph
-from market import router as market_router
-
-# ── Feature 8: Voice Assistant ───────────────────────────────────────────────
-from routes.voice_routes import router as voice_router
-
-# ── FarmAI Multilingual Chatbot ──────────────────────────────────────────────
-from chat.router import router as chat_router
-
-
-# ── Disease knowledge base (imported) ─────────────────────────────────────────
+# ── Disease knowledge base ────────────────────────────────────────────────────
 from disease_info import DISEASE_INFO, get_disease_info
 
 CONFIDENCE_THRESHOLD = 0.25
-
 
 
 # =============================================================================
@@ -76,84 +59,92 @@ app = FastAPI(title="AgriGPT API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://agrigpt-xi.vercel.app",   # Production Vercel frontend
+        "http://localhost:5173",            # Local dev
+        "http://localhost:3000",            # Local dev (alternate)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Include Auth & Dashboard routers ─────────────────────────────────────────
+# ── Include routers ───────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(dashboard_router)
-
-# ── Include Feature 3 router ──────────────────────────────────────────────────
 app.include_router(fertilizer_router)
-
-# ── Include Feature 6 router ──────────────────────────────────────────────────
 app.include_router(schemes_router)
-
-# ── Include Feature 5 router ──────────────────────────────────────────────────
 app.include_router(irrigation_router)
-
-# ── Include Feature 7 router ──────────────────────────────────────────────────
 app.include_router(market_router)
 app.include_router(voice_router)
 app.include_router(chat_router)
 
 
-
 # =============================================================================
-# STARTUP — load models
+# STARTUP
 # =============================================================================
 @app.on_event("startup")
 async def startup_event():
-    # Feature 1: Disease detection model
+    print("[AgriGPT] Starting up...")
     print("[AgriGPT] Using Hugging Face Space for disease detection.")
 
-    # Feature 3: Fertilizer RAG engine
-    print("[AgriGPT] Loading fertilizer RAG engine…")
+    print("[AgriGPT] Loading fertilizer RAG engine...")
     try:
-        # load_rag_engine()
         print("[AgriGPT] Fertilizer RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Fertilizer RAG skipped: {e}")
 
-    # Feature 6: Government Schemes Q&A
-    print("[AgriGPT] Loading government schemes RAG engine…")
+    print("[AgriGPT] Loading government schemes RAG engine...")
     try:
-        # load_schemes_engine()
         print("[AgriGPT] Government schemes RAG engine ready.")
     except EnvironmentError as e:
         print(f"[AgriGPT] [WARNING] Government schemes RAG skipped: {e}")
 
-    # Feature 7: Market Advisor Graph
-    print("[AgriGPT] Loading market advisor graph…")
+    print("[AgriGPT] Loading market advisor graph...")
     try:
-        # load_market_graph()
         print("[AgriGPT] Market advisor graph ready.")
     except Exception as e:
         print(f"[AgriGPT] [WARNING] Market advisor graph skipped: {e}")
 
-    # Feature: FarmAI Multilingual Chatbot RAG index
-    print("[AgriGPT] Building FarmAI FAISS index…")
+    print("[AgriGPT] Building FarmAI FAISS index...")
     try:
         from chat.rag_pipeline import build_index as build_chat_index
-        # build_chat_index()
         print("[AgriGPT] FarmAI RAG index ready.")
     except Exception as e:
         print(f"[AgriGPT] [WARNING] FarmAI Chat RAG skipped: {e}")
 
+    # Warm up Groq client (text LLM)
+    try:
+        from chat.farming_agent import _get_groq_client
+        _get_groq_client()
+        print("[AgriGPT] Groq client ready (llama-3.1-8b-instant).")
+    except Exception as e:
+        print(f"[AgriGPT] [WARNING] Groq warmup skipped: {e}")
+
+    # Warm up Gemini client (image LLM)
+    try:
+        from chat.farming_agent import _get_gemini_model
+        _get_gemini_model()
+        print("[AgriGPT] Gemini client ready (gemini-2.0-flash).")
+    except Exception as e:
+        print(f"[AgriGPT] [WARNING] Gemini warmup skipped: {e}")
+
+    print("[AgriGPT] All systems ready.")
 
 
 # =============================================================================
-# FEATURE 1 — DISEASE DETECTION
+# HEALTH & HOME
 # =============================================================================
 @app.get("/health")
 def health():
     return {
-        "status"  : "ok",
-        "classes" : 38,
-        "device"  : "cpu",
+        "status" : "ok",
+        "classes": 38,
+        "device" : "cpu",
+        "llm"    : {
+            "text" : "Groq / llama-3.1-8b-instant",
+            "image": "Gemini / gemini-2.0-flash",
+        },
     }
 
 
@@ -162,8 +153,14 @@ def home():
     return {"message": "AgriGPT Backend Running"}
 
 
+# =============================================================================
+# FEATURE 1 — DISEASE DETECTION
+# =============================================================================
 @app.post("/diagnose")
-async def diagnose(file: UploadFile = File(...), authorization: str = Header(default="")):
+async def diagnose(
+    file: UploadFile = File(...),
+    authorization: str = Header(default=""),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image (JPG or PNG)")
 
@@ -204,8 +201,8 @@ async def diagnose(file: UploadFile = File(...), authorization: str = Header(def
         "consult_agronomist" : top_confidence < 0.80,
         "top5"               : [
             {
-                "class"      : item["class"].replace("___", " — ").replace("_", " "),
-                "confidence" : item["confidence"],
+                "class"     : item["class"].replace("___", " — ").replace("_", " "),
+                "confidence": item["confidence"],
             }
             for item in result["top_k"]
         ],
@@ -214,22 +211,22 @@ async def diagnose(file: UploadFile = File(...), authorization: str = Header(def
     user_id = None
     if authorization and authorization.startswith("Bearer "):
         user_id = decode_token(authorization.split(" ", 1)[1])
-    
+
     if user_id:
         now = datetime.now(timezone.utc)
         try:
             disease_diagnoses_col().insert_one({
-                "user_id": safe_object_id(user_id),
-                "timestamp": now.isoformat(),
-                "disease_detected": condition_name if top_confidence >= CONFIDENCE_THRESHOLD else "Unknown",
-                "severity": info.get("severity", "none"),
-                "confidence": float(top_confidence)
+                "user_id"          : safe_object_id(user_id),
+                "timestamp"        : now.isoformat(),
+                "disease_detected" : condition_name if top_confidence >= CONFIDENCE_THRESHOLD else "Unknown",
+                "severity"         : info.get("severity", "none"),
+                "confidence"       : float(top_confidence),
             })
             chat_history_col().insert_one({
-                "user_id": safe_object_id(user_id),
-                "agent": "disease",
-                "query": f"Uploaded crop photo. Result: {condition_name}",
-                "created_at": now
+                "user_id"   : safe_object_id(user_id),
+                "agent"     : "disease",
+                "query"     : f"Uploaded crop photo. Result: {condition_name}",
+                "created_at": now,
             })
         except Exception:
             pass
@@ -238,22 +235,26 @@ async def diagnose(file: UploadFile = File(...), authorization: str = Header(def
 
 
 # =============================================================================
-# FEATURE 4 — SOIL HEALTH ANALYSIS (Gemini version)
+# FEATURE 4 — SOIL HEALTH ANALYSIS
+# Uses Gemini (gemini-2.0-flash) for streaming analysis
 # =============================================================================
 from pydantic import BaseModel
 
 class SoilAnalyseRequest(BaseModel):
-    ph: float
-    n: float
-    p: float
-    k: float
+    ph     : float
+    n      : float
+    p      : float
+    k      : float
     texture: str
-    grade: str
-    lang: str = "en"
+    grade  : str
+    lang   : str = "en"
 
 
 @app.post("/soil/analyse")
-async def soil_analyse(req: SoilAnalyseRequest, authorization: str = Header(default="")):
+async def soil_analyse(
+    req          : SoilAnalyseRequest,
+    authorization: str = Header(default=""),
+):
     import json
     import asyncio
     from fastapi.responses import StreamingResponse
@@ -268,10 +269,9 @@ async def soil_analyse(req: SoilAnalyseRequest, authorization: str = Header(defa
     }
     lang_instruction = lang_map[lang]
 
-    # Evaluate statuses locally to assist the LLM
-    n_status = "deficient (Very Low)" if req.n < 120 else ("low" if req.n < 180 else "good/optimal")
-    p_status = "deficient (Very Low)" if req.p < 15 else ("low" if req.p < 30 else "good/optimal")
-    k_status = "deficient (Very Low)" if req.k < 100 else ("low" if req.k < 160 else "good/optimal")
+    n_status  = "deficient (Very Low)" if req.n < 120 else ("low" if req.n < 180 else "good/optimal")
+    p_status  = "deficient (Very Low)" if req.p < 15  else ("low" if req.p < 30  else "good/optimal")
+    k_status  = "deficient (Very Low)" if req.k < 100 else ("low" if req.k < 160 else "good/optimal")
     ph_status = "acidic (low)" if req.ph < 6.0 else ("alkaline (high)" if req.ph > 7.5 else "neutral (optimal)")
 
     prompt = f"""You are AgriGPT's soil health expert for Indian farmers (Telangana/Andhra Pradesh focus).
@@ -283,35 +283,38 @@ Soil test values and their evaluated statuses:
 - Nitrogen (N): {req.n} kg/ha (Status: {n_status})
 - Phosphorus (P): {req.p} kg/ha (Status: {p_status})
 - Potassium (K): {req.k} kg/ha (Status: {k_status})
-- Soil texture: {req.texture} (Note: 'loamy' texture is translated as '\u0c26\u0c41\u0c02\u0c2a \u0c28\u0c47\u0c32' in Telugu, meaning root/tuber crop soil)
+- Soil texture: {req.texture}
 - Overall soil grade: {req.grade}
 
-Provide a structured response with EXACTLY these three sections. Keep the section headers in English:
+Provide a structured response with EXACTLY these three sections. Keep section headers in English:
 
 TOP 3 CROPS:
 List exactly 3 crops best suited for these soil conditions with suitability % (e.g. "Tomato — 92%").
-* If the soil texture is 'loamy' ('\u0c26\u0c41\u0c02\u0c2a \u0c28\u0c47\u0c32'), prioritize root/tuber crops (such as Ginger, Turmeric, Sweet Potato, Cassava) or loamy-loving vegetables.
+If the soil texture is loamy, prioritize root/tuber crops (Ginger, Turmeric, Sweet Potato, Cassava).
 
 DEFICIENCIES:
-List the evaluated status of each parameter (including pH and NPK).
-* Explicitly state if pH is optimal or if there's an issue (acidic/alkaline) and what it means for nutrient uptake.
-* For N, P, and K, comment ONLY on the ones that are low or deficient. If a nutrient status is good/optimal, state that it is sufficient. Do NOT confuse low/deficient nutrients.
+List the evaluated status of each parameter (pH and NPK).
+State if pH is optimal or problematic. Comment only on low/deficient nutrients.
 
 IMPROVEMENT PLAN:
-Give exactly 3 numbered actionable soil improvement tips customized to the deficiencies identified:
-* Tip 1: Organic matter / carbon building.
-* Tip 2: Correcting the specific nutrient deficiencies (e.g., if Potassium is low/deficient, recommend MOP or potassium-rich fertilizers; if Phosphorus is low/deficient, recommend SSP/DAP; if Nitrogen is low/deficient, recommend Urea).
-* Tip 3: pH correction — IMPORTANT: if pH is acidic (<6.0), recommend agricultural lime; if pH is alkaline (>7.5), recommend Elemental Sulfur (NOT gypsum — gypsum does not lower pH; sulfur converts to sulfuric acid in soil and actively lowers pH); if pH is optimal, give a general micro-nutrient/organic tip.
+Give exactly 3 numbered actionable soil improvement tips:
+1. Organic matter / carbon building.
+2. Correcting specific nutrient deficiencies.
+3. pH correction — if acidic use agricultural lime; if alkaline use Elemental Sulfur (NOT gypsum); if optimal give a micro-nutrient tip.
 
-IMPORTANT: The section headers (TOP 3 CROPS, DEFICIENCIES, IMPROVEMENT PLAN) MUST stay in English. All other content must be in the language specified above.
+IMPORTANT: Section headers (TOP 3 CROPS, DEFICIENCIES, IMPROVEMENT PLAN) MUST stay in English.
 Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."""
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured. Set it in backend/.env")
-    
+        raise HTTPException(
+            status_code=500,
+            detail="GEMINI_API_KEY not configured. Set it in Render Environment Variables.",
+        )
+
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    # ✅ Using gemini-2.0-flash — stable, fast, free tier available
+    model = genai.GenerativeModel("gemini-2.0-flash")
 
     async def generate():
         use_fallback = False
@@ -320,190 +323,94 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
             for chunk in response:
                 if chunk.text:
                     data = {
-                        "type": "content_block_delta",
-                        "delta": {"text": chunk.text}
+                        "type" : "content_block_delta",
+                        "delta": {"text": chunk.text},
                     }
                     yield f"data: {json.dumps(data)}\n\n"
                     await asyncio.sleep(0.01)
         except Exception as e:
-            print(f"[Soil Analyse] Gemini API call failed or key is invalid ({e}). Falling back to simulated streaming analysis.")
+            print(f"[Soil Analyse] Gemini streaming failed: {e}. Using fallback.")
             use_fallback = True
 
-        # Log Activity after streaming starts
+        # Log activity
         user_id = None
         if authorization and authorization.startswith("Bearer "):
             user_id = decode_token(authorization.split(" ", 1)[1])
         if user_id:
             try:
                 chat_history_col().insert_one({
-                    "user_id": safe_object_id(user_id),
-                    "agent": "soil",
-                    "query": f"Analyzed soil (pH: {req.ph}, N: {req.n}, P: {req.p}, K: {req.k})",
-                    "created_at": datetime.now(timezone.utc)
+                    "user_id"   : safe_object_id(user_id),
+                    "agent"     : "soil",
+                    "query"     : f"Analyzed soil (pH:{req.ph}, N:{req.n}, P:{req.p}, K:{req.k})",
+                    "created_at": datetime.now(timezone.utc),
                 })
             except Exception:
                 pass
-            
-        if use_fallback:
-            # Evaluated statuses
-            n_s = "deficient" if req.n < 120 else ("low" if req.n < 180 else "optimal")
-            p_s = "deficient" if req.p < 15 else ("low" if req.p < 30 else "optimal")
-            k_s = "deficient" if req.k < 100 else ("low" if req.k < 160 else "optimal")
-            ph_s = "acidic" if req.ph < 6.0 else ("alkaline" if req.ph > 7.5 else "optimal")
 
-            # Localized crops (prioritizing root/tuber crops for loamy soil)
+        if use_fallback:
+            n_s  = "deficient" if req.n < 120 else ("low" if req.n < 180 else "optimal")
+            p_s  = "deficient" if req.p < 15  else ("low" if req.p < 30  else "optimal")
+            k_s  = "deficient" if req.k < 100 else ("low" if req.k < 160 else "optimal")
+            ph_s = "acidic"    if req.ph < 6.0 else ("alkaline" if req.ph > 7.5 else "optimal")
+
             _crops = {
                 "en": {
                     "black": [("Cotton", 94), ("Paddy", 88), ("Chilli", 85)],
-                    "clay": [("Paddy", 91), ("Maize", 83), ("Sorghum", 78)],
+                    "clay" : [("Paddy", 91), ("Maize", 83), ("Sorghum", 78)],
                     "sandy": [("Groundnut", 92), ("Chilli", 84), ("Sesame", 79)],
-                    "loamy": [("Sweet Potato", 92), ("Ginger", 88), ("Tomato", 85)]
-                },
-                "te": {
-                    "black": [("\u0c2a\u0c24\u0c4d\u0c24\u0c3f (Cotton)", 94), ("\u0c35\u0c30\u0c3f (Paddy)", 88), ("\u0c2e\u0c3f\u0c30\u0c2a (Chilli)", 85)],
-                    "clay": [("\u0c35\u0c30\u0c3f (Paddy)", 91), ("\u0c2e\u0c4a\u0c15\u0c4d\u0c15\u0c1c\u0c4a\u0c28\u0c4d\u0c28 (Maize)", 83), ("\u0c1c\u0c4a\u0c28\u0c4d\u0c28 (Sorghum)", 78)],
-                    "sandy": [("\u0c35\u0c47\u0c30\u0c41\u0c36\u0c46\u0c28\u0c17 (Groundnut)", 92), ("\u0c2e\u0c3f\u0c30\u0c2a (Chilli)", 84), ("\u0c28\u0c41\u0c35\u0c4d\u0c35\u0c41\u0c32\u0c41 (Sesame)", 79)],
-                    "loamy": [("\u0c1a\u0c3f\u0c32\u0c17\u0c21\u0c26\u0c41\u0c02\u0c2a (Sweet Potato)", 92), ("\u0c05\u0c32\u0c4d\u0c32\u0c02 (Ginger)", 88), ("\u0c1f\u0c2e\u0c4b\u0c1f\u0c3e (Tomato)", 85)]
-                },
-                "hi": {
-                    "black": [("\u0915\u092a\u093e\u0938 (Cotton)", 94), ("\u0927\u093e\u0928 (Paddy)", 88), ("\u092e\u093f\u0930\u094d\u091a (Chilli)", 85)],
-                    "clay": [("\u0927\u093e\u0928 (Paddy)", 91), ("\u092e\u0915\u094d\u0915\u093e (Maize)", 83), ("\u091c\u094d\u0935\u093e\u0930 (Sorghum)", 78)],
-                    "sandy": [("\u092e\u0942\u0902\u0917\u092b\u0932\u0940 (Groundnut)", 92), ("\u092e\u093f\u0930\u094d\u091a (Chilli)", 84), ("\u0924\u093f\u0932 (Sesame)", 79)],
-                    "loamy": [("\u0936\u0915\u0930\u0915\u0902\u0926 (Sweet Potato)", 92), ("\u0905\u0926\u0930\u0915 (Ginger)", 88), ("\u091f\u092e\u093e\u091f\u0930 (Tomato)", 85)]
+                    "loamy": [("Sweet Potato", 92), ("Ginger", 88), ("Tomato", 85)],
                 },
             }
+            crops = _crops["en"].get(req.texture, _crops["en"]["loamy"])
 
-            _ph_desc = {
-                "en": {
-                    "acidic": f"Soil pH is acidic ({req.ph}). This limits availability of key nutrients.",
-                    "alkaline": f"Soil pH is alkaline ({req.ph}). This can lock micronutrients like zinc and iron.",
-                    "optimal": f"Soil pH is optimal ({req.ph}), which is excellent for nutrient absorption."
-                },
-                "te": {
-                    "acidic": f"\u0c28\u0c47\u0c32 pH \u0c06\u0c2e\u0c4d\u0c32\u0c24\u0c4d\u0c35\u0c02\u0c17\u0c3e \u0c09\u0c02\u0c26\u0c3f ({req.ph}). \u0c07\u0c26\u0c3f \u0c2e\u0c41\u0c16\u0c4d\u0c2f\u0c2e\u0c48\u0c28 \u0c2a\u0c4b\u0c37\u0c15\u0c3e\u0c32 \u0c32\u0c2d\u0c4d\u0c2f\u0c24\u0c28\u0c41 \u0c2a\u0c30\u0c3f\u0c2e\u0c3f\u0c24\u0c02 \u0c1a\u0c47\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f.",
-                    "alkaline": f"\u0c28\u0c47\u0c32 pH \u0c15\u0c4d\u0c37\u0c3e\u0c30\u0c24\u0c4d\u0c35\u0c02\u0c17\u0c3e \u0c09\u0c02\u0c26\u0c3f ({req.ph}). \u0c07\u0c26\u0c3f \u0c1c\u0c3f\u0c02\u0c15\u0c4d \u0c2e\u0c30\u0c3f\u0c2f\u0c41 \u0c07\u0c28\u0c41\u0c2e\u0c41 \u0c35\u0c02\u0c1f\u0c3f \u0c38\u0c42\u0c15\u0c4d\u0c37\u0c4d\u0c2e\u0c2a\u0c4b\u0c37\u0c15\u0c3e\u0c32\u0c28\u0c41 \u0c28\u0c3f\u0c30\u0c4b\u0c27\u0c3f\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f.",
-                    "optimal": f"\u0c28\u0c47\u0c32 pH \u0c24\u0c1f\u0c38\u0c4d\u0c25\u0c02\u0c17\u0c3e/\u0c38\u0c30\u0c48\u0c28\u0c26\u0c3f\u0c17\u0c3e \u0c09\u0c02\u0c26\u0c3f ({req.ph}), \u0c07\u0c26\u0c3f \u0c2a\u0c4b\u0c37\u0c15\u0c3e\u0c32 \u0c36\u0c4b\u0c37\u0c23\u0c15\u0c41 \u0c1a\u0c3e\u0c32\u0c3e \u0c2e\u0c02\u0c1a\u0c3f\u0c26\u0c3f."
-                },
-                "hi": {
-                    "acidic": f"\u092e\u093f\u091f\u094d\u091f\u0940 \u0915\u093e pH \u0905\u092e\u094d\u0932\u0940\u092f \u0939\u0948 ({req.ph}). \u092f\u0939 \u092e\u0941\u0916\u094d\u092f \u092a\u094b\u0937\u0915 \u0924\u0924\u094d\u0935\u094b\u0902 \u0915\u0940 \u0909\u092a\u0932\u092c\u094d\u0927\u0924\u093e \u0915\u094b \u0938\u0940\u092e\u093f\u0924 \u0915\u0930\u0924\u093e \u0939\u0948.",
-                    "alkaline": f"\u092e\u093f\u091f\u094d\u091f\u0940 \u0915\u093e pH \u0915\u094d\u0937\u093e\u0930\u0940\u092f \u0939\u0948 ({req.ph}). \u092f\u0939 \u091c\u093f\u0902\u0915 \u0914\u0930 \u0932\u094b\u0939\u0947 \u091c\u0948\u0938\u0947 \u0938\u0942\u0915\u094d\u0937\u094d\u092e \u092a\u094b\u0937\u0915 \u0924\u0924\u094d\u0935\u094b\u0902 \u0915\u094b \u0905\u0935\u0930\u094b\u0927\u093f\u0924 \u0915\u0930\u0924\u093e \u0939\u0948.",
-                    "optimal": f"\u092e\u093f\u091f\u094d\u091f\u0940 \u0915\u093e pH \u0905\u0928\u0941\u0915\u0942\u0932 \u0939\u0948 ({req.ph}), \u091c\u094b \u092a\u094b\u0937\u0915 \u0924\u0924\u094d\u0935\u094b\u0902 \u0915\u0947 \u0905\u0935\u0936\u094b\u0937\u0923 \u0915\u0947 \u0932\u093f\u090f \u0909\u0924\u094d\u0915\u0943\u0937\u094d\u091f \u0939\u0948."
-                }
-            }
+            defs = []
+            if ph_s == "acidic":   defs.append(f"- Soil pH is acidic ({req.ph}) — limits nutrient availability.")
+            elif ph_s == "alkaline": defs.append(f"- Soil pH is alkaline ({req.ph}) — can lock micronutrients.")
+            else:                  defs.append(f"- Soil pH is optimal ({req.ph}) — good for nutrient absorption.")
+            if n_s != "optimal": defs.append(f"- Nitrogen (N) is {n_s} ({req.n} kg/ha).")
+            if p_s != "optimal": defs.append(f"- Phosphorus (P) is {p_s} ({req.p} kg/ha).")
+            if k_s != "optimal": defs.append(f"- Potassium (K) is {k_s} ({req.k} kg/ha).")
 
-            _sl = {"en": {"deficient": "deficient", "low": "low"}, "te": {"deficient": "\u0c32\u0c4b\u0c2a\u0c02", "low": "\u0c24\u0c15\u0c4d\u0c15\u0c41\u0c35"}, "hi": {"deficient": "\u0915\u092e\u0940", "low": "\u0915\u092e"}}
-            
-            _def_t = {
-                "en": {
-                    "N": "Nitrogen (N) is {s} ({v} kg/ha). Causes yellowing of older leaves and stunted growth.",
-                    "P": "Phosphorus (P) is {s} ({v} kg/ha). Limits root development and delays crop maturity.",
-                    "K": "Potassium (K) is {s} ({v} kg/ha). Reduces disease resistance and fruit quality.",
-                },
-                "te": {
-                    "N": "\u0c28\u0c24\u0c4d\u0c30\u0c1c\u0c28\u0c3f (N) {s} ({v} \u0c15\u0c3f.\u0c17\u0c4d\u0c30\u0c3e/\u0c39\u0c46). \u0c2a\u0c3e\u0c24 \u0c06\u0c15\u0c41\u0c32 \u0c2a\u0c38\u0c41\u0c2a\u0c41 \u0c30\u0c02\u0c17\u0c41 \u0c2e\u0c30\u0c3f\u0c2f\u0c41 \u0c2e\u0c02\u0c26\u0c17\u0c3f\u0c02\u0c1a\u0c3f\u0c28 \u0c2a\u0c46\u0c30\u0c41\u0c17\u0c41\u0c26\u0c32\u0c15\u0c41 \u0c15\u0c3e\u0c30\u0c23\u0c02.",
-                    "P": "\u0c2d\u0c3e\u0c38\u0c4d\u0c35\u0c30\u0c02 (P) {s} ({v} \u0c15\u0c3f.\u0c17\u0c4d\u0c30\u0c3e/\u0c39\u0c46). \u0c35\u0c47\u0c30\u0c41 \u0c05\u0c2d\u0c3f\u0c35\u0c43\u0c26\u0c4d\u0c27\u0c3f\u0c28\u0c3f \u0c2a\u0c30\u0c3f\u0c2e\u0c3f\u0c24\u0c02 \u0c1a\u0c47\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f \u0c2e\u0c30\u0c3f\u0c2f\u0c41 \u0c2a\u0c02\u0c1f \u0c2a\u0c30\u0c3f\u0c2a\u0c15\u0c4d\u0c35\u0c24\u0c28\u0c41 \u0c06\u0c32\u0c38\u0c4d\u0c2f\u0c02 \u0c1a\u0c47\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f.",
-                    "K": "\u0c2a\u0c4a\u0c1f\u0c3e\u0c37\u0c3f\u0c2f\u0c02 (K) {s} ({v} \u0c15\u0c3f.\u0c17\u0c4d\u0c30\u0c3e/\u0c39\u0c46). \u0c35\u0c4d\u0c2f\u0c3e\u0c27\u0c3f \u0c28\u0c3f\u0c30\u0c4b\u0c27\u0c15\u0c24 \u0c2e\u0c30\u0c3f\u0c2f\u0c41 \u0c2a\u0c02\u0c21\u0c41 \u0c28\u0c3e\u0c23\u0c4d\u0c2f\u0c24\u0c28\u0c41 \u0c24\u0c17\u0c4d\u0c17\u0c3f\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f.",
-                },
-                "hi": {
-                    "N": "\u0928\u093e\u0907\u091f\u094d\u0930\u094b\u091c\u0928 (N) {s} ({v} \u0915\u093f\u0917\u094d\u0930\u093e/\u0939\u0947). \u092a\u0941\u0930\u093e\u0928\u0940 \u092a\u0924\u094d\u0924\u093f\u092f\u094b\u0902 \u0915\u093e \u092a\u0940\u0932\u093e\u092a\u0928 \u0914\u0930 \u0905\u0935\u0930\u0941\u0926\u094d\u0927 \u0935\u0943\u0926\u094d\u0927\u093f \u0915\u093e \u0915\u093e\u0930\u0923.",
-                    "P": "\u092b\u093e\u0938\u094d\u092b\u094b\u0930\u0938 (P) {s} ({v} \u0915\u093f\u0917\u094d\u0930\u093e/\u0939\u0947). \u091c\u0921\u093c \u0935\u093f\u0915\u093e\u0938 \u0915\u094b \u0938\u0940\u092e\u093f\u0924 \u0915\u0930\u0924\u093e \u0939\u0948 \u0914\u0930 \u092b\u0938\u0932 \u092a\u0930\u093f\u092a\u0915\u094d\u0935\u0924\u093e \u092e\u0947\u0902 \u0926\u0947\u0930\u0940 \u0915\u0930\u0924\u093e \u0939\u0948.",
-                    "K": "\u092a\u094b\u091f\u0948\u0936\u093f\u092f\u092e (K) {s} ({v} \u0915\u093f\u0917\u094d\u0930\u093e/\u0939\u0947). \u0930\u094b\u0917 \u092a\u094d\u0930\u0924\u093f\u0930\u094b\u0927\u0915 \u0915\u094d\u0937\u092e\u0924\u093e \u0914\u0930 \u092b\u0932 \u0917\u0941\u0923\u0935\u0924\u094d\u0924\u093e \u0915\u092e \u0915\u0930\u0924\u093e \u0939\u0948.",
-                },
-            }
+            tip2 = "Maintain balanced fertilization."
+            if k_s == "deficient": tip2 = "Apply MOP (Muriate of Potash) to correct Potassium deficiency."
+            elif p_s == "deficient": tip2 = "Apply SSP or DAP to correct Phosphorus deficiency."
+            elif n_s == "deficient": tip2 = "Apply Urea in split doses to correct Nitrogen deficiency."
+            elif k_s == "low": tip2 = "Apply MOP to improve Potassium levels."
+            elif p_s == "low": tip2 = "Apply SSP to improve Phosphorus levels."
+            elif n_s == "low": tip2 = "Apply Urea to improve Nitrogen levels."
 
-            _tips = {
-                "en": {
-                    "organic": "Add 5-10 tonnes/ha of well-decomposed FYM or compost to build organic carbon.",
-                    "N": "Apply Urea in split doses to correct Nitrogen deficiency.",
-                    "P": "Apply SSP (Single Super Phosphate) or DAP to correct Phosphorus deficiency.",
-                    "K": "Apply MOP (Muriate of Potash) to correct Potassium deficiency.",
-                    "lime": "Apply agricultural lime to neutralize soil acidity.",
-                    "gypsum": "Apply Elemental Sulfur (not gypsum) to reduce alkaline pH. Sulfur converts to sulfuric acid in the soil via microbes, actively lowering the pH level.",
-                    "general": "Maintain regular crop rotation and green manuring (dhaincha) to preserve fertility."
-                },
-                "te": {
-                    "organic": "\u0c38\u0c47\u0c02\u0c26\u0c4d\u0c30\u0c3f\u0c2f \u0c15\u0c3e\u0c30\u0c4d\u0c2c\u0c28\u0c4d \u0c2a\u0c46\u0c02\u0c1a\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f 5-10 \u0c1f\u0c28\u0c4d\u0c28\u0c41\u0c32\u0c41/\u0c39\u0c46\u0c15\u0c4d\u0c1f\u0c3e\u0c30\u0c41\u0c15\u0c41 \u0c2c\u0c3e\u0c17\u0c3e \u0c15\u0c41\u0c33\u0c4d\u0c33\u0c3f\u0c28 \u0c2a\u0c36\u0c41\u0c35\u0c41\u0c32 \u0c0e\u0c30\u0c41\u0c35\u0c41 \u0c32\u0c47\u0c26\u0c3e \u0c15\u0c02\u0c2a\u0c4b\u0c38\u0c4d\u0c1f\u0c4d \u0c15\u0c32\u0c2a\u0c02\u0c21\u0c3f.",
-                    "N": "\u0c28\u0c24\u0c4d\u0c30\u0c1c\u0c28\u0c3f \u0c32\u0c4b\u0c2a\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c38\u0c30\u0c3f\u0c26\u0c3f\u0c26\u0c4d\u0c26\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c2f\u0c42\u0c30\u0c3f\u0c2f\u0c3e\u0c28\u0c41 \u0c35\u0c3f\u0c2d\u0c1c\u0c3f\u0c24 \u0c2e\u0c4b\u0c24\u0c3e\u0c26\u0c41\u0c32\u0c4d\u0c32\u0c4b \u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f.",
-                    "P": "\u0c2d\u0c3e\u0c38\u0c4d\u0c35\u0c30\u0c02 \u0c32\u0c4b\u0c2a\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c38\u0c30\u0c3f\u0c26\u0c3f\u0c26\u0c4d\u0c26\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f SSP \u0c32\u0c47\u0c26\u0c3e DAP \u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f.",
-                    "K": "\u0c2a\u0c4a\u0c1f\u0c3e\u0c37\u0c3f\u0c2f\u0c02 \u0c32\u0c4b\u0c2a\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c38\u0c30\u0c3f\u0c26\u0c3f\u0c26\u0c4d\u0c26\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f MOP (\u0c2e\u0c4d\u0c2f\u0c42\u0c30\u0c3f\u0c2f\u0c47\u0c1f\u0c4d \u0c06\u0c2b\u0c4d \u0c2a\u0c4a\u0c1f\u0c3e\u0c37\u0c4d) \u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f.",
-                    "lime": "\u0c28\u0c47\u0c32 \u0c06\u0c2e\u0c4d\u0c32\u0c24\u0c4d\u0c35\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c24\u0c17\u0c4d\u0c17\u0c3f\u0c02\u0c1a\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c35\u0c4d\u0c2f\u0c35\u0c38\u0c3e\u0c2f \u0c38\u0c41\u0c28\u0c4d\u0c28\u0c02 \u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f.",
-                    "gypsum": "\u0c28\u0c47\u0c32 \u0c15\u0c4d\u0c37\u0c3e\u0c30\u0c24\u0c4d\u0c35\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c24\u0c17\u0c4d\u0c17\u0c3f\u0c02\u0c1a\u0c21\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c2e\u0c42\u0c32\u0c15 \u0c17\u0c02\u0c27\u0c15\u0c02 (Elemental Sulfur) \u0c35\u0c47\u0c2f\u0c02\u0c21\u0c3f. \u0c17\u0c02\u0c27\u0c15\u0c02 \u0c28\u0c47\u0c32\u0c32\u0c4b \u0c38\u0c32\u0c4d\u0c2b\u0c4d\u0c2f\u0c42\u0c30\u0c3f\u0c15\u0c4d \u0c06\u0c2e\u0c4d\u0c32\u0c02\u0c17\u0c3e \u0c2e\u0c3e\u0c30\u0c3f pH \u0c28\u0c3f \u0c24\u0c17\u0c4d\u0c17\u0c3f\u0c38\u0c4d\u0c24\u0c41\u0c02\u0c26\u0c3f.",
-                    "general": "\u0c28\u0c47\u0c32 \u0c38\u0c3e\u0c30\u0c35\u0c02\u0c24\u0c3e\u0c28\u0c4d\u0c28\u0c3f \u0c15\u0c3e\u0c2a\u0c3e\u0c21\u0c1f\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c15\u0c4d\u0c30\u0c2e\u0c02 \u0c24\u0c2a\u0c4d\u0c2a\u0c15\u0c41\u0c02\u0c21\u0c3e \u0c2a\u0c02\u0c1f \u0c2e\u0c3e\u0c30\u0c4d\u0c2a\u0c3f\u0c21\u0c3f \u0c2e\u0c30\u0c3f\u0c2f\u0c41 \u0c2a\u0c1a\u0c4d\u0c1a\u0c3f\u0c30\u0c4a\u0c1f\u0c4d\u0c1f \u0c0e\u0c30\u0c41\u0c35\u0c41\u0c32 \u0c38\u0c3e\u0c17\u0c41 \u0c1a\u0c47\u0c2f\u0c02\u0c21\u0c3f."
-                },
-                "hi": {
-                    "organic": "\u091c\u0948\u0935\u093f\u0915 \u0915\u093e\u0930\u094d\u092c\u0928 \u092c\u0922\u093c\u093e\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f 5-10 \u091f\u0928/\u0939\u0947\u0915\u094d\u091f\u0947\u092f\u0930 \u0905\u091a\u094d\u091b\u0940 \u0924\u0930\u0939 \u0938\u0947 \u0938\u0921\u093c\u0940 \u0939\u0941\u0908 \u0917\u094b\u092c\u0930 \u0915\u0940 \u0916\u093e\u0926 \u092f\u093e \u0915\u092e\u094d\u092a\u094b\u0938\u094d\u091f \u092e\u093f\u0932\u093e\u090f\u0902.",
-                    "N": "\u0928\u093e\u0907\u091f\u094d\u0930\u094b\u091c\u0928 \u0915\u0940 \u0915\u092e\u0940 \u0915\u094b \u0926\u0942\u0930 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u092f\u0942\u0930\u093f\u092f\u093e \u0915\u094b \u0935\u093f\u092d\u093e\u091c\u093f\u0924 \u0916\u0941\u0930\u093e\u0915 \u092e\u0947\u0902 \u0921\u093e\u0932\u0947\u0902.",
-                    "P": "\u092b\u093e\u0938\u094d\u092b\u094b\u0930\u0938 \u0915\u0940 \u0915\u092e\u0940 \u0915\u094b \u0926\u0942\u0930 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f SSP \u092f\u093e DAP \u0921\u093e\u0932\u0947\u0902.",
-                    "K": "\u092a\u094b\u091f\u0947\u0936\u093f\u092f\u092e \u0915\u0940 \u0915\u092e\u0940 \u0915\u094b \u0926\u0942\u0930 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f MOP (\u092e\u094d\u092f\u0942\u0930\u093f\u090f\u091f \u0911\u092b \u092a\u094b\u091f\u093e\u0936) \u0921\u093e\u0932\u0947\u0902.",
-                    "lime": "\u092e\u093f\u091f\u094d\u091f\u0940 \u0915\u0940 \u0905\u092e\u094d\u0932\u0924\u093e \u0915\u094b \u0915\u092e \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u0915\u0943\u0937\u093f \u091a\u0942\u0928\u093e \u0921\u093e\u0932\u0947\u0902.",
-                    "gypsum": "\u092e\u093f\u091f\u094d\u091f\u0940 \u0915\u0940 \u0915\u094d\u0937\u093e\u0930\u0940\u092f\u0924\u093e \u0915\u094b \u0915\u092e \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u092e\u0942\u0932 \u0917\u0902\u0927\u0915 (Elemental Sulfur) \u0921\u093e\u0932\u0947\u0902\u0964 \u0917\u0902\u0927\u0915 \u092e\u093f\u091f\u094d\u091f\u0940 \u092e\u0947\u0902 \u0938\u0932\u094d\u092b\u094d\u092f\u0942\u0930\u093f\u0915 \u090f\u0938\u093f\u0921 \u092e\u0947\u0902 \u092c\u0926\u0932\u0915\u0930 pH \u0915\u094b \u0915\u092e \u0915\u0930\u0924\u093e \u0939\u0948\u0964",
-                    "general": "\u0909\u0930\u094d\u0935\u0930\u093e \u0936\u0915\u094d\u0924\u093f \u092c\u0928\u093e\u090f \u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u092b\u0938\u0932 \u091a\u0915\u094d\u0930 \u0914\u0930 \u0939\u0930\u0940 \u0916\u093e\u0926 \u0915\u093e \u0928\u093f\u092f\u092e\u093f\u0924 \u0909\u092a\u092f\u094b\u0917 \u0915\u0930\u0947\u0902."
-                }
-            }
+            tip3 = "Maintain crop rotation and green manuring to preserve fertility."
+            if ph_s == "acidic":   tip3 = "Apply agricultural lime to neutralize soil acidity."
+            elif ph_s == "alkaline": tip3 = "Apply Elemental Sulfur (not gypsum) to reduce alkaline pH."
 
-            cl = _crops.get(lang, _crops["en"])
-            crops = cl.get(req.texture, cl["loamy"])
-            sl = _sl.get(lang, _sl["en"])
-            dt = _def_t.get(lang, _def_t["en"])
-            tps = _tips.get(lang, _tips["en"])
-
-            defs = [ "- " + _ph_desc[lang][ph_s] ]
-            if n_s != "optimal": defs.append("- " + dt["N"].format(s=sl[n_s], v=req.n))
-            if p_s != "optimal": defs.append("- " + dt["P"].format(s=sl[p_s], v=req.p))
-            if k_s != "optimal": defs.append("- " + dt["K"].format(s=sl[k_s], v=req.k))
-            def_text = "\n".join(defs)
-
-            # Build 3 actionable tips
-            tip1 = tps["organic"]
-            
-            # Tip 2: Find lowest nutrient to correct
-            tip2 = tps["general"]
-            if n_s != "optimal" or p_s != "optimal" or k_s != "optimal":
-                if k_s == "deficient": tip2 = tps["K"]
-                elif p_s == "deficient": tip2 = tps["P"]
-                elif n_s == "deficient": tip2 = tps["N"]
-                elif k_s == "low": tip2 = tps["K"]
-                elif p_s == "low": tip2 = tps["P"]
-                elif n_s == "low": tip2 = tps["N"]
-
-            # Tip 3: pH correction
-            tip3 = tps["general"]
-            if ph_s == "acidic": tip3 = tps["lime"]
-            elif ph_s == "alkaline": tip3 = tps["gypsum"]
-
-            response_text = f"""TOP 3 CROPS:
+            fallback_text = f"""TOP 3 CROPS:
 - {crops[0][0]} — {crops[0][1]}%
 - {crops[1][0]} — {crops[1][1]}%
 - {crops[2][0]} — {crops[2][1]}%
 
 DEFICIENCIES:
-{def_text}
+{chr(10).join(defs)}
 
 IMPROVEMENT PLAN:
-1. {tip1}
+1. Add 5-10 tonnes/ha of well-decomposed FYM or compost to build organic carbon.
 2. {tip2}
 3. {tip3}"""
 
-            words = response_text.split(" ")
+            words = fallback_text.split(" ")
             for i in range(0, len(words), 3):
-                text_chunk = " ".join(words[i:i+3]) + " "
-                data = {"type": "content_block_delta", "delta": {"text": text_chunk}}
+                chunk_text = " ".join(words[i:i+3]) + " "
+                data = {"type": "content_block_delta", "delta": {"text": chunk_text}}
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.05)
-                
+
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-
 
 
 # =============================================================================
 # RUN
 # =============================================================================
 if __name__ == "__main__":
-    import os
-    import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

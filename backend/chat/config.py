@@ -2,15 +2,26 @@ import os
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    gemini_api_key: str = ""
+    # ── API Keys ──────────────────────────────────────────────────────────────
+    gemini_api_key: str = ""        # Used for IMAGE understanding only
+    groq_api_key: str = ""          # Used for TEXT chat, Q&A, recommendations
     google_translate_api_key: str = ""
-    frontend_origin: str = "http://localhost:5173"
+    
+    # ── App config ────────────────────────────────────────────────────────────
+    frontend_origin: str = "https://agrigpt-xi.vercel.app"
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
     use_indic_trans2: bool = False
-    top_k_chunks: int = 6          # RAG: how many chunks to retrieve
+    top_k_chunks: int = 6
     max_response_tokens: int = 2048
 
-    model_config = {"env_file": os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"), "extra": "ignore"}
+    # ── Model names ───────────────────────────────────────────────────────────
+    groq_model: str = "llama-3.1-8b-instant"          # Fast, 14400 req/day free
+    gemini_model: str = "gemini-2.0-flash"             # For image/multimodal
+
+    model_config = {
+        "env_file": os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"),
+        "extra": "ignore"
+    }
 
 settings = Settings()
 
@@ -41,19 +52,17 @@ LANGUAGE_MAP: dict[str, str] = {
     "ne": "Nepali",
 }
 
-# Unicode block → (lang_code) — most reliable detection for Indic scripts
 UNICODE_SCRIPT_MAP: list[tuple[range, str]] = [
-    (range(0x0C00, 0x0C80), "te"),   # Telugu
-    (range(0x0900, 0x0980), "hi"),   # Devanagari (Hindi/Marathi/Sanskrit)
-    (range(0x0B80, 0x0C00), "ta"),   # Tamil
-    (range(0x0C80, 0x0D00), "kn"),   # Kannada
-    (range(0x0D00, 0x0D80), "ml"),   # Malayalam
-    (range(0x0980, 0x0A00), "bn"),   # Bengali
-    (range(0x0A80, 0x0B00), "gu"),   # Gujarati
-    (range(0x0A00, 0x0A80), "pa"),   # Gurmukhi (Punjabi)
-    (range(0x0B00, 0x0B80), "or"),   # Odia
-    (range(0x0600, 0x0700), "ur"),   # Arabic script (Urdu/Kashmiri)
+    (range(0x0C00, 0x0C80), "te"),
+    (range(0x0900, 0x0980), "hi"),
+    (range(0x0B80, 0x0C00), "ta"),
+    (range(0x0C80, 0x0D00), "kn"),
+    (range(0x0D00, 0x0D80), "ml"),
+    (range(0x0980, 0x0A00), "bn"),
+    (range(0x0A80, 0x0B00), "gu"),
+    (range(0x0A00, 0x0A80), "pa"),
+    (range(0x0B00, 0x0B80), "or"),
+    (range(0x0600, 0x0700), "ur"),
 ]
 
-# Phase-1 languages with full RAG + Gemini support
 PHASE1_LANGUAGES = {"en", "hi", "te"}
