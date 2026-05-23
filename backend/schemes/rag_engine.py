@@ -17,7 +17,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-LLM_MODEL  = "gemini-2.0-flash"
+LLM_MODEL = "gemini-2.5-flash-preview-05-20"
 
 _llm           = None
 _vector_db     = "none"
