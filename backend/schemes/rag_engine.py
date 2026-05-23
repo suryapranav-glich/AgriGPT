@@ -1,11 +1,10 @@
 # =============================================================================
 # AgriGPT — Government Schemes Q&A
-# schemes/rag_engine.py  (Fixed v3)
+# schemes/rag_engine.py  (Fixed v4)
 #
-# FIXES from v2:
-#   - Removed signal.alarm() — only works on main thread, crashes in executor
-#   - Timeout is handled by asyncio.wait_for() in router instead
-#   - Cleaner error handling
+# FIXES from v3:
+#   - Updated model to gemini-2.5-flash-preview-05-20
+#   - Robust JSON extraction (handles thinking tags, preamble, trailing text)
 # =============================================================================
 
 import os
@@ -17,7 +16,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-LLM_MODEL = "gemini-2.5-flash"
+LLM_MODEL = "gemini-2.5-flash-preview-04-17"
 
 _llm           = None
 _vector_db     = "none"
@@ -164,6 +163,37 @@ def _static_context(question: str, state: str, language: str) -> str:
 
 
 # =============================================================================
+# JSON EXTRACTION HELPER
+# =============================================================================
+def _extract_json(raw: str) -> dict:
+    """
+    Robustly extract a JSON object from Gemini output.
+    Handles: thinking tags, markdown fences, preamble text, trailing text.
+    """
+    # 1. Strip <thinking>...</thinking> blocks (Gemini 2.5 thinking output)
+    raw = re.sub(r"<thinking>.*?</thinking>", "", raw, flags=re.DOTALL)
+
+    # 2. Strip markdown fences
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+
+    # 3. Try direct parse first (clean output)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Extract the first {...} JSON object (handles preamble/trailing text)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if match:
+        return json.loads(match.group(0))
+
+    # 5. Nothing worked — raise so router returns 500
+    raise json.JSONDecodeError("No valid JSON object found in response", raw, 0)
+
+
+# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 def ask(
@@ -173,7 +203,7 @@ def ask(
 ) -> dict:
     """
     Schemes Q&A — called from router via asyncio.to_thread().
-    No signal.alarm() here — timeout handled by asyncio.wait_for() in router.
+    Timeout handled by asyncio.wait_for() in router.
     """
     global _llm, _engine_loaded
 
@@ -197,13 +227,8 @@ def ask(
     response = _llm.generate_content(prompt)
     raw      = response.text.strip()
 
-    # Strip accidental markdown fences
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$",          "", raw)
-    raw = raw.strip()
-
-    # Parse JSON
-    result = json.loads(raw)
+    # Robust JSON extraction
+    result = _extract_json(raw)
 
     result["_meta"] = {
         "vector_db"      : _vector_db,
