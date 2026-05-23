@@ -70,7 +70,7 @@ except ImportError:
 GROK_API_KEY      = os.getenv("GROK_API_KEY", "")
 AGMARKNET_API_KEY = os.getenv("AGMARKNET_API_KEY", "")
 REDIS_URL         = os.getenv("REDIS_URL", "redis://localhost:6379")
-MONGODB_URI       = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+MONGODB_URI       = os.getenv("MONGO_URI", os.getenv("MONGODB_URI", "mongodb://localhost:27017"))
 
 # ── Router Setup ──────────────────────────────────────────────────────────────
 
@@ -780,38 +780,34 @@ async def market_prices(
     markets = build_nearby_markets(crop, district, current)
 
     # 6. Save to MongoDB farm memory (blueprint: per-user crop history)
-    mongo = get_mongo()
-    if mongo:
-        user_id = None
-        if authorization and authorization.startswith("Bearer "):
-            token = authorization.split(" ", 1)[1]
-            user_id = decode_token(token)
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        user_id = decode_token(token)
 
-        try:
-            db  = mongo["agrigpt"]
-            col = db["market_queries"]
-            doc = {
-                "crop":      crop,
-                "district":  district,
-                "price":     current,
-                "action":    rec["action"],
-                "timestamp": date.today().isoformat(),
-            }
-            if user_id:
-                doc["user_id"] = ObjectId(user_id)
-            await col.insert_one(doc)
+    try:
+        from auth.db import market_queries_col, chat_history_col
+        from datetime import datetime, timezone
+        doc = {
+            "crop":      crop,
+            "district":  district,
+            "price":     current,
+            "action":    rec["action"],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if user_id:
+            doc["user_id"] = ObjectId(user_id)
+        market_queries_col().insert_one(doc)
 
-            if user_id:
-                from auth.db import chat_history_col
-                from datetime import datetime, timezone
-                chat_history_col().insert_one({
-                    "user_id":    ObjectId(user_id),
-                    "agent":      "market",
-                    "query":      f"Checked prices for {crop} in {district}",
-                    "created_at": datetime.now(timezone.utc)
-                })
-        except Exception:
-            pass
+        if user_id:
+            chat_history_col().insert_one({
+                "user_id":    ObjectId(user_id),
+                "agent":      "market",
+                "query":      f"Checked prices for {crop} in {district}",
+                "created_at": datetime.now(timezone.utc)
+            })
+    except Exception as e:
+        print("Failed to save market query/history to MongoDB:", e)
 
     return {
         "crop":           crop,

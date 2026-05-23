@@ -99,7 +99,7 @@ def get_metrics(authorization: str = Header(default="")):
 
     # ── 3. Active Crop — from latest market query ─────────────────────────────
     latest_market = market_queries_col().find_one(
-        user_filter, sort=[("timestamp", -1)]
+        user_filter, sort=[("_id", -1)]
     )
     if latest_market:
         active_crop     = latest_market.get("crop") or farm.get("active_crop") or "Not specified"
@@ -116,7 +116,7 @@ def get_metrics(authorization: str = Header(default="")):
         prev_market = market_queries_col().find_one(
             {**user_filter, "crop": active_crop,
              "_id": {"$ne": latest_market["_id"]}},
-            sort=[("timestamp", -1)]
+            sort=[("_id", -1)]
         )
         if prev_market and prev_market.get("price") and latest_market.get("price"):
             prev_p    = float(prev_market["price"])
@@ -126,13 +126,8 @@ def get_metrics(authorization: str = Header(default="")):
 
     # ── 4. Disease Diagnosis — latest diagnosis record ────────────────────────
     latest_disease = disease_diagnoses_col().find_one(
-        user_filter, sort=[("updated_at", -1)]
+        user_filter, sort=[("_id", -1)]
     )
-    # Also try created_at if updated_at not present
-    if not latest_disease:
-        latest_disease = disease_diagnoses_col().find_one(
-            user_filter, sort=[("created_at", -1)]
-        )
 
     if latest_disease:
         last_diagnosis          = (
@@ -152,12 +147,8 @@ def get_metrics(authorization: str = Header(default="")):
 
     # ── 5. Irrigation — latest schedule ───────────────────────────────────────
     latest_irrigation = irrigation_logs_col().find_one(
-        user_filter, sort=[("timestamp", -1)]
+        user_filter, sort=[("_id", -1)]
     )
-    if not latest_irrigation:
-        latest_irrigation = irrigation_logs_col().find_one(
-            user_filter, sort=[("created_at", -1)]
-        )
 
     if latest_irrigation:
         next_irrigation = (

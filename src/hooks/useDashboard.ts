@@ -16,7 +16,7 @@ export function useDashboardMetrics() {
     queryKey: DASHBOARD_QUERY_KEY,
     queryFn: dashboardApi.getMetrics,
     enabled: isAuthenticated,
-    staleTime: 60_000,        // Re-use cached data for 1 minute
+    staleTime: 0,             // Force refetch on component mount / tab navigation
     refetchOnWindowFocus: true,
     retry: 2,
   });

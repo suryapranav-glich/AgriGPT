@@ -49,7 +49,11 @@ from inference import predict_from_pil
 # ── Disease knowledge base ────────────────────────────────────────────────────
 from disease_info import DISEASE_INFO, get_disease_info
 
-CONFIDENCE_THRESHOLD = 0.25
+# ── Confidence threshold ──────────────────────────────────────────────────────
+# HF Space returns values like 55.64 (percent). We divide by 100 in /diagnose
+# so the effective threshold here is 0.20 = 20% minimum confidence.
+# Your HF model returns 55%+ so this will always pass for real predictions.
+CONFIDENCE_THRESHOLD = 0.20  # was 0.25 — lowered to handle borderline cases
 
 
 # =============================================================================
@@ -60,9 +64,10 @@ app = FastAPI(title="AgriGPT API", version="2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://agrigpt-xi.vercel.app",   # Production Vercel frontend
-        "http://localhost:5173",            # Local dev
-        "http://localhost:3000",            # Local dev (alternate)
+        "https://agrigpt-xi.vercel.app",
+        "https://agrigpt-gs4dapeaj-suryas-projects-0a30678c.vercel.app",  # preview deploy
+        "http://localhost:5173",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -86,25 +91,7 @@ app.include_router(chat_router)
 @app.on_event("startup")
 async def startup_event():
     print("[AgriGPT] Starting up...")
-    print("[AgriGPT] Using Hugging Face Space for disease detection.")
-
-    print("[AgriGPT] Loading fertilizer RAG engine...")
-    try:
-        print("[AgriGPT] Fertilizer RAG engine ready.")
-    except EnvironmentError as e:
-        print(f"[AgriGPT] [WARNING] Fertilizer RAG skipped: {e}")
-
-    print("[AgriGPT] Loading government schemes RAG engine...")
-    try:
-        print("[AgriGPT] Government schemes RAG engine ready.")
-    except EnvironmentError as e:
-        print(f"[AgriGPT] [WARNING] Government schemes RAG skipped: {e}")
-
-    print("[AgriGPT] Loading market advisor graph...")
-    try:
-        print("[AgriGPT] Market advisor graph ready.")
-    except Exception as e:
-        print(f"[AgriGPT] [WARNING] Market advisor graph skipped: {e}")
+    print(f"[AgriGPT] HF Space URL: {os.getenv('HF_SPACE_URL', 'https://ssuryapranav-agrimodel-disease.hf.space')}")
 
     print("[AgriGPT] Building FarmAI FAISS index...")
     try:
@@ -113,7 +100,6 @@ async def startup_event():
     except Exception as e:
         print(f"[AgriGPT] [WARNING] FarmAI Chat RAG skipped: {e}")
 
-    # Warm up Groq client (text LLM)
     try:
         from chat.farming_agent import _get_groq_client
         _get_groq_client()
@@ -121,7 +107,6 @@ async def startup_event():
     except Exception as e:
         print(f"[AgriGPT] [WARNING] Groq warmup skipped: {e}")
 
-    # Warm up Gemini client (image LLM)
     try:
         from chat.farming_agent import _get_gemini_model
         _get_gemini_model()
@@ -141,7 +126,8 @@ def health():
         "status" : "ok",
         "classes": 38,
         "device" : "cpu",
-        "llm"    : {
+        "hf_space": os.getenv("HF_SPACE_URL", "https://ssuryapranav-agrimodel-disease.hf.space"),
+        "llm": {
             "text" : "Groq / llama-3.1-8b-instant",
             "image": "Gemini / gemini-2.0-flash",
         },
@@ -166,40 +152,68 @@ async def diagnose(
 
     contents  = await file.read()
     pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-    result    = predict_from_pil(pil_image, top_k=5)
 
-    top_confidence = result["confidence"] / 100.0
-    top_class      = result["predicted_class"]
-    plant_name     = result["plant"]
-    condition_name = result["condition"]
+    # ── Call HF Space via inference.py ────────────────────────────────────────
+    result = predict_from_pil(pil_image, top_k=5)
 
+    # ── result["confidence"] is already a PERCENTAGE (e.g. 55.64)
+    # ── We normalise to 0-1 only for the threshold comparison
+    top_confidence_pct = result["confidence"]           # e.g. 55.64
+    top_confidence     = top_confidence_pct / 100.0     # e.g. 0.5564
+
+    top_class      = result["predicted_class"]           # e.g. "Tomato___Late_blight"
+    plant_name     = result["plant"]                     # e.g. "Tomato"
+    condition_name = result["condition"]                 # e.g. "Late blight"
+
+    # ── Debug log (visible in Render logs) ────────────────────────────────────
+    print(f"[/diagnose] plant={plant_name!r}  condition={condition_name!r}  "
+          f"confidence={top_confidence_pct}%  threshold={CONFIDENCE_THRESHOLD*100}%")
+
+    # ── Uncertain: HF call failed entirely (confidence == 0) ─────────────────
+    if top_confidence_pct == 0.0 or plant_name == "Unknown":
+        return {
+            "status"            : "uncertain",
+            "message"           : (
+                "Could not reach the disease detection model. "
+                "Please try again — the AI model may be waking up (cold start)."
+            ),
+            "confidence"        : 0.0,
+            "top_predictions"   : [],
+            "consult_agronomist": True,
+        }
+
+    # ── Uncertain: low confidence real prediction ─────────────────────────────
     if top_confidence < CONFIDENCE_THRESHOLD:
         return {
-            "status"             : "uncertain",
-            "message"            : "Could not confidently identify the disease. Please upload a clearer close-up leaf photo.",
-            "confidence"         : round(top_confidence * 100, 1),
-            "top_predictions"    : [
+            "status"            : "uncertain",
+            "message"           : (
+                f"Model confidence too low ({top_confidence_pct:.1f}%). "
+                "Please upload a clearer, close-up leaf photo in good lighting."
+            ),
+            "confidence"        : round(top_confidence_pct, 1),
+            "top_predictions"   : [
                 {"class": item["class"], "confidence": item["confidence"]}
                 for item in result["top_k"]
             ],
-            "consult_agronomist" : True,
+            "consult_agronomist": True,
         }
 
+    # ── Success ───────────────────────────────────────────────────────────────
     info = get_disease_info(top_class)
 
     response_data = {
-        "status"             : "success",
-        "plant"              : plant_name,
-        "disease"            : condition_name,
-        "class_id"           : top_class,
-        "confidence"         : round(top_confidence * 100, 1),
-        "severity"           : info["severity"],
-        "cause"              : info["cause"],
-        "organic_treatment"  : info["organic"],
-        "chemical_treatment" : info["chemical"],
-        "prevention_tips"    : info["prevention"],
-        "consult_agronomist" : top_confidence < 0.80,
-        "top5"               : [
+        "status"            : "success",
+        "plant"             : plant_name,
+        "disease"           : condition_name,
+        "class_id"          : top_class,
+        "confidence"        : round(top_confidence_pct, 1),
+        "severity"          : info["severity"],
+        "cause"             : info["cause"],
+        "organic_treatment" : info["organic"],
+        "chemical_treatment": info["chemical"],
+        "prevention_tips"   : info["prevention"],
+        "consult_agronomist": top_confidence < 0.80,
+        "top5"              : [
             {
                 "class"     : item["class"].replace("___", " — ").replace("_", " "),
                 "confidence": item["confidence"],
@@ -208,6 +222,7 @@ async def diagnose(
         ],
     }
 
+    # ── Save to MongoDB ───────────────────────────────────────────────────────
     user_id = None
     if authorization and authorization.startswith("Bearer "):
         user_id = decode_token(authorization.split(" ", 1)[1])
@@ -218,25 +233,30 @@ async def diagnose(
             disease_diagnoses_col().insert_one({
                 "user_id"          : safe_object_id(user_id),
                 "timestamp"        : now.isoformat(),
-                "disease_detected" : condition_name if top_confidence >= CONFIDENCE_THRESHOLD else "Unknown",
+                "created_at"       : now,
+                "updated_at"       : now,
+                "disease_detected" : condition_name,
+                "disease"          : condition_name,
+                "plant"            : plant_name,
                 "severity"         : info.get("severity", "none"),
                 "confidence"       : float(top_confidence),
+                "result"           : f"{plant_name} — {condition_name}",
             })
             chat_history_col().insert_one({
                 "user_id"   : safe_object_id(user_id),
                 "agent"     : "disease",
                 "query"     : f"Uploaded crop photo. Result: {condition_name}",
+                "status"    : "answered",
                 "created_at": now,
             })
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[/diagnose] MongoDB save error: {e}")
 
     return response_data
 
 
 # =============================================================================
 # FEATURE 4 — SOIL HEALTH ANALYSIS
-# Uses Gemini (gemini-2.0-flash) for streaming analysis
 # =============================================================================
 from pydantic import BaseModel
 
@@ -313,7 +333,6 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
         )
 
     genai.configure(api_key=api_key)
-    # ✅ Using gemini-2.0-flash — stable, fast, free tier available
     model = genai.GenerativeModel("gemini-2.0-flash")
 
     async def generate():
@@ -342,6 +361,7 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
                     "user_id"   : safe_object_id(user_id),
                     "agent"     : "soil",
                     "query"     : f"Analyzed soil (pH:{req.ph}, N:{req.n}, P:{req.p}, K:{req.k})",
+                    "status"    : "answered",
                     "created_at": datetime.now(timezone.utc),
                 })
             except Exception:
@@ -354,33 +374,31 @@ Be concise, practical, and farmer-friendly. No markdown bold, no extra headers."
             ph_s = "acidic"    if req.ph < 6.0 else ("alkaline" if req.ph > 7.5 else "optimal")
 
             _crops = {
-                "en": {
-                    "black": [("Cotton", 94), ("Paddy", 88), ("Chilli", 85)],
-                    "clay" : [("Paddy", 91), ("Maize", 83), ("Sorghum", 78)],
-                    "sandy": [("Groundnut", 92), ("Chilli", 84), ("Sesame", 79)],
-                    "loamy": [("Sweet Potato", 92), ("Ginger", 88), ("Tomato", 85)],
-                },
+                "black": [("Cotton", 94), ("Paddy", 88), ("Chilli", 85)],
+                "clay" : [("Paddy", 91), ("Maize", 83), ("Sorghum", 78)],
+                "sandy": [("Groundnut", 92), ("Chilli", 84), ("Sesame", 79)],
+                "loamy": [("Sweet Potato", 92), ("Ginger", 88), ("Tomato", 85)],
             }
-            crops = _crops["en"].get(req.texture, _crops["en"]["loamy"])
+            crops = _crops.get(req.texture, _crops["loamy"])
 
             defs = []
-            if ph_s == "acidic":   defs.append(f"- Soil pH is acidic ({req.ph}) — limits nutrient availability.")
+            if ph_s == "acidic":     defs.append(f"- Soil pH is acidic ({req.ph}) — limits nutrient availability.")
             elif ph_s == "alkaline": defs.append(f"- Soil pH is alkaline ({req.ph}) — can lock micronutrients.")
-            else:                  defs.append(f"- Soil pH is optimal ({req.ph}) — good for nutrient absorption.")
+            else:                    defs.append(f"- Soil pH is optimal ({req.ph}) — good for nutrient absorption.")
             if n_s != "optimal": defs.append(f"- Nitrogen (N) is {n_s} ({req.n} kg/ha).")
             if p_s != "optimal": defs.append(f"- Phosphorus (P) is {p_s} ({req.p} kg/ha).")
             if k_s != "optimal": defs.append(f"- Potassium (K) is {k_s} ({req.k} kg/ha).")
 
             tip2 = "Maintain balanced fertilization."
-            if k_s == "deficient": tip2 = "Apply MOP (Muriate of Potash) to correct Potassium deficiency."
+            if   k_s == "deficient": tip2 = "Apply MOP (Muriate of Potash) to correct Potassium deficiency."
             elif p_s == "deficient": tip2 = "Apply SSP or DAP to correct Phosphorus deficiency."
             elif n_s == "deficient": tip2 = "Apply Urea in split doses to correct Nitrogen deficiency."
-            elif k_s == "low": tip2 = "Apply MOP to improve Potassium levels."
-            elif p_s == "low": tip2 = "Apply SSP to improve Phosphorus levels."
-            elif n_s == "low": tip2 = "Apply Urea to improve Nitrogen levels."
+            elif k_s == "low":       tip2 = "Apply MOP to improve Potassium levels."
+            elif p_s == "low":       tip2 = "Apply SSP to improve Phosphorus levels."
+            elif n_s == "low":       tip2 = "Apply Urea to improve Nitrogen levels."
 
             tip3 = "Maintain crop rotation and green manuring to preserve fertility."
-            if ph_s == "acidic":   tip3 = "Apply agricultural lime to neutralize soil acidity."
+            if   ph_s == "acidic":   tip3 = "Apply agricultural lime to neutralize soil acidity."
             elif ph_s == "alkaline": tip3 = "Apply Elemental Sulfur (not gypsum) to reduce alkaline pH."
 
             fallback_text = f"""TOP 3 CROPS:
@@ -398,7 +416,7 @@ IMPROVEMENT PLAN:
 
             words = fallback_text.split(" ")
             for i in range(0, len(words), 3):
-                chunk_text = " ".join(words[i:i+3]) + " "
+                chunk_text = " ".join(words[i:i + 3]) + " "
                 data = {"type": "content_block_delta", "delta": {"text": chunk_text}}
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.05)
